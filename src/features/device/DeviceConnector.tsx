@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { ArrowRight, Cable, LoaderCircle } from "lucide-react";
 import { ErrorMessage } from "../../components/ErrorMessage";
 import { DeviceSummary } from "./DeviceSummary";
@@ -6,6 +7,8 @@ import type {
   DeviceConnectionState,
   OvisDeviceInfo,
 } from "./device.types";
+
+const OvisModelViewer = lazy(() => import("./OvisModelViewer"));
 
 interface DeviceConnectorProps {
   state: DeviceConnectionState;
@@ -73,6 +76,15 @@ export function DeviceConnector({
             <ArrowRight className="button__arrow" size={17} />
           </button>
         </div>
+        <Suspense
+          fallback={
+            <div className="model-loading" aria-hidden="true">
+              <LoaderCircle size={24} />
+            </div>
+          }
+        >
+          <OvisModelViewer />
+        </Suspense>
       </div>
     </div>
   );
