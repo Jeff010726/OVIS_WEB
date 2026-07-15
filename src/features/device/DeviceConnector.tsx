@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Cable,
   Check,
+  ImageOff,
   LoaderCircle,
   RefreshCw,
   Search,
@@ -11,6 +12,7 @@ import {
 import { ErrorMessage } from "../../components/ErrorMessage";
 import { DeviceSummary } from "./DeviceSummary";
 import { DEVICE_HOSTS } from "./device.api";
+import { getDeviceImage } from "./device.assets";
 import type {
   DeviceConnectionErrorCode,
   DeviceState,
@@ -146,6 +148,7 @@ export function DeviceConnector({
             {devices.map((entry) => {
               const selected =
                 selectedDevice?.info.device_id === entry.info.device_id;
+              const deviceImage = getDeviceImage(entry.info.model);
               return (
                 <button
                   className="device-result"
@@ -157,16 +160,35 @@ export function DeviceConnector({
                   key={entry.info.device_id}
                   onClick={() => onSelectDevice(entry.info.device_id)}
                 >
-                  <span className="device-result__selector" aria-hidden="true">
-                    {selected && <Check size={13} strokeWidth={2.4} />}
+                  <span className="device-result__visual">
+                    {deviceImage ? (
+                      <img
+                        src={deviceImage}
+                        alt={`${entry.info.name} 产品图`}
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="device-result__placeholder" aria-hidden="true">
+                        <ImageOff size={24} strokeWidth={1.3} />
+                        {entry.info.model}
+                      </span>
+                    )}
+                    <span className="device-result__selector" aria-hidden="true">
+                      {selected && <Check size={13} strokeWidth={2.4} />}
+                    </span>
+                    <span className="device-result__status">
+                      {entry.status === "online" ? "在线" : "离线"}
+                    </span>
                   </span>
-                  <span className="device-result__identity">
-                    <strong>{entry.info.name}</strong>
-                    <small>{entry.info.model} · {entry.info.serial}</small>
-                  </span>
-                  <span className="device-result__endpoint">
-                    <span>{entry.status === "online" ? "在线" : "离线"}</span>
-                    <small>{endpointLabel(entry.apiBaseUrl)}</small>
+                  <span className="device-result__details">
+                    <span className="device-result__identity">
+                      <strong>{entry.info.name}</strong>
+                      <small>{entry.info.model}</small>
+                    </span>
+                    <span className="device-result__serial">{entry.info.serial}</span>
+                    <span className="device-result__endpoint">
+                      {endpointLabel(entry.apiBaseUrl)}
+                    </span>
                   </span>
                 </button>
               );

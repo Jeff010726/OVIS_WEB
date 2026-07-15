@@ -161,6 +161,17 @@ test("scans with at most four requests and deduplicates device ids", async ({
   await page.getByRole("button", { name: "搜索设备" }).click();
   await expect(page.getByText("发现 2 台 OVIS 设备")).toBeVisible();
   await expect(page.getByRole("radio")).toHaveCount(2);
+  const productImages = page.locator(".device-result__visual img");
+  await expect(productImages).toHaveCount(2);
+  await expect(productImages.first()).toBeVisible();
+  const imageMetrics = await productImages.first().evaluate((image) => ({
+    complete: (image as HTMLImageElement).complete,
+    naturalWidth: (image as HTMLImageElement).naturalWidth,
+    renderedWidth: image.getBoundingClientRect().width,
+  }));
+  expect(imageMetrics.complete).toBe(true);
+  expect(imageMetrics.naturalWidth).toBe(978);
+  expect(imageMetrics.renderedWidth).toBeGreaterThan(200);
   expect(requestedHosts.size).toBe(16);
   expect(maximumActiveRequests).toBeGreaterThan(1);
   expect(maximumActiveRequests).toBeLessThanOrEqual(4);
