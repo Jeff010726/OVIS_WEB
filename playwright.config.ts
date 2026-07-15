@@ -5,6 +5,7 @@ const remoteBaseUrl = process.env.PLAYWRIGHT_BASE_URL;
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
+  workers: 4,
   reporter: "list",
   use: {
     baseURL: remoteBaseUrl ?? "http://127.0.0.1:4173/ovis-manager-web/",

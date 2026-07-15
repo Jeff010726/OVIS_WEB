@@ -20,7 +20,7 @@ function App() {
 
       <main className="main-content">
         <div className="page-heading">
-          <h1>设备连接</h1>
+          <h1>{connection.state === "connected" ? "设备配置" : "设备连接"}</h1>
         </div>
 
         <section className="workspace-panel" aria-label="设备连接工作区">

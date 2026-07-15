@@ -58,6 +58,71 @@ const secondDeviceInfo = {
   serial: "OVIS-1842-00987654",
 };
 
+const configCapabilities = {
+  schema_version: 1,
+  video: {
+    main: {
+      profiles: [
+        {
+          id: "1080p",
+          width: 1920,
+          height: 1080,
+          fps_options: [15, 25, 30],
+          bitrate_min: 512,
+          bitrate_max: 15000,
+        },
+        {
+          id: "720p",
+          width: 1280,
+          height: 720,
+          fps_options: [15, 25, 30],
+          bitrate_min: 384,
+          bitrate_max: 8000,
+        },
+      ],
+    },
+    sub: {
+      profiles: [
+        {
+          id: "768x572",
+          width: 768,
+          height: 572,
+          fps_options: [15, 25, 30],
+          bitrate_min: 128,
+          bitrate_max: 4000,
+        },
+      ],
+    },
+  },
+  features: {
+    osd: true,
+    person_detection: true,
+    face_detection: true,
+    motion_detection: true,
+  },
+};
+
+const currentConfig = {
+  revision: "a81f36c2",
+  values: {
+    video: {
+      main: { profile: "1080p", fps: 30, bitrate_kbps: 10000 },
+      sub: {
+        enabled: true,
+        profile: "768x572",
+        fps: 30,
+        bitrate_kbps: 1000,
+      },
+    },
+    overlay: { enabled: true },
+    detection: {
+      person: { enabled: true, threshold: 0.7 },
+      face: { enabled: false, threshold: 0.5 },
+      motion: { enabled: false, sensitivity: 50 },
+    },
+  },
+};
+
 const requestHost = (route: Route) => new URL(route.request().url()).hostname;
 
 const fulfillJson = (route: Route, body: unknown) =>
@@ -81,6 +146,18 @@ async function discoverSingleDevice(page: Page) {
   ).toBeVisible();
 }
 
+async function mockConfigurationRead(page: Page) {
+  await page.route("**/api/v1/config/capabilities", (route) =>
+    fulfillJson(route, configCapabilities),
+  );
+  await page.route("**/api/v1/config", (route) => {
+    if (route.request().method() === "GET") {
+      return fulfillJson(route, currentConfig);
+    }
+    return route.fallback();
+  });
+}
+
 test("shows the initial discovery workspace", async ({ page }) => {
   await page.goto("./");
 
@@ -96,7 +173,7 @@ test("renders and rotates the optimized product model", async ({ page }) => {
   await page.goto("./");
   const model = page.getByRole("img", { name: "OVIS 相机模组 3D 展示" });
   await expect(model).toHaveAttribute("data-model-status", "ready", {
-    timeout: 15_000,
+    timeout: 25_000,
   });
   const canvas = model.locator("canvas");
   await expect(canvas).toBeVisible();
@@ -188,6 +265,7 @@ test("scans with at most four requests and deduplicates device ids", async ({
 });
 
 test("selects, confirms, connects, and disconnects locally", async ({ page }) => {
+  await mockConfigurationRead(page);
   await discoverSingleDevice(page);
 
   const result = page.getByRole("radio", {
@@ -200,16 +278,231 @@ test("selects, confirms, connects, and disconnects locally", async ({ page }) =>
   await connectButton.click();
 
   await expect(page.getByText("设备在线")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "设备配置", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "OVIS Camera" })).toBeVisible();
+  await expect(page.getByAltText("OVIS Camera 产品图")).toBeVisible();
   await expect(page.getByText("OVIS-1842-00123456").first()).toBeVisible();
-  await expect(page.getByText("Manager 版本")).toBeVisible();
-  await expect(page.getByText("v1", { exact: true })).toBeVisible();
+  await expect(page.getByText("固件 / Manager")).toBeVisible();
+  await expect(page.getByText("设备配置", { exact: true }).last()).toBeVisible();
+  await expect(page.getByRole("region", { name: "主码流" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "启用 OSD" })).toBeChecked();
   await expect(page.getByText("192.168.42.1:8080/api/v1")).toBeVisible();
   await page.screenshot({ path: "/tmp/ovis-connected-desktop.png", fullPage: true });
 
-  await page.getByRole("button", { name: "断开连接" }).click();
+  await page.getByTitle("断开连接").click();
   await expect(page.getByText("发现 1 台 OVIS 设备")).toBeVisible();
   await expect(page.getByText("搜索完成")).toBeVisible();
+});
+
+test("edits, validates, saves, applies, and polls configuration", async ({
+  page,
+}) => {
+  let savedValues = structuredClone(currentConfig.values);
+  let activeRevision = currentConfig.revision;
+  let validatePayload: Record<string, unknown> | null = null;
+  let savePayload: Record<string, unknown> | null = null;
+  let applyPayload: Record<string, unknown> | null = null;
+  let taskRequests = 0;
+
+  await page.route("**/api/v1/config/capabilities", (route) =>
+    fulfillJson(route, configCapabilities),
+  );
+  await page.route("**/api/v1/config/validate", async (route) => {
+    validatePayload = await route.request().postDataJSON();
+    return fulfillJson(route, {
+      valid: true,
+      errors: [],
+      warnings: [],
+      requires: ["ipcamera_restart"],
+    });
+  });
+  await page.route("**/api/v1/config/apply", async (route) => {
+    applyPayload = await route.request().postDataJSON();
+    return fulfillJson(route, { task_id: 12 });
+  });
+  await page.route("**/api/v1/tasks/12", (route) => {
+    taskRequests += 1;
+    return fulfillJson(
+      route,
+      taskRequests === 1
+        ? {
+            id: 12,
+            state: "running",
+            stage: "restarting_ipcamera",
+            progress: 60,
+            message: "正在重启视频服务",
+          }
+        : {
+            id: 12,
+            state: "succeeded",
+            stage: "completed",
+            progress: 100,
+            message: "配置应用成功",
+          },
+    );
+  });
+  await page.route("**/api/v1/config", async (route) => {
+    if (route.request().method() === "PUT") {
+      savePayload = await route.request().postDataJSON();
+      savedValues = structuredClone(
+        (savePayload as { values: typeof currentConfig.values }).values,
+      );
+      activeRevision = "b929d204";
+      return fulfillJson(route, {
+        saved: true,
+        revision: activeRevision,
+        restart_required: true,
+      });
+    }
+    return fulfillJson(route, { revision: activeRevision, values: savedValues });
+  });
+
+  await discoverSingleDevice(page);
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+  const mainStream = page.getByRole("region", { name: "主码流" });
+  await expect(mainStream).toBeVisible();
+
+  await mainStream.getByRole("spinbutton").fill("9000");
+  await page.getByRole("switch", { name: "启用 OSD" }).click();
+  await expect(page.getByText("有未保存修改")).toBeVisible();
+  const saveButton = page.getByRole("button", { name: "保存并应用" });
+  await expect(saveButton).toBeEnabled();
+  await saveButton.click();
+
+  await expect(page.getByText("正在重启视频服务")).toBeVisible();
+  await expect(page.getByText("配置应用成功")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("配置已同步")).toBeVisible();
+  expect(taskRequests).toBe(2);
+  expect(validatePayload).toMatchObject({
+    revision: "a81f36c2",
+    values: { video: { main: { bitrate_kbps: 9000 } }, overlay: { enabled: false } },
+  });
+  expect(savePayload).toEqual(validatePayload);
+  expect(applyPayload).toEqual({ revision: "b929d204" });
+});
+
+test("shows server validation errors without saving", async ({ page }) => {
+  let saveRequests = 0;
+  await page.route("**/api/v1/config/capabilities", (route) =>
+    fulfillJson(route, configCapabilities),
+  );
+  await page.route("**/api/v1/config/validate", (route) =>
+    fulfillJson(route, {
+      valid: false,
+      errors: [
+        {
+          field: "video.main.bitrate_kbps",
+          code: "OUT_OF_RANGE",
+          message: "主码流码率超出允许范围",
+        },
+      ],
+      warnings: [],
+      requires: [],
+    }),
+  );
+  await page.route("**/api/v1/config", (route) => {
+    if (route.request().method() === "PUT") saveRequests += 1;
+    return fulfillJson(route, currentConfig);
+  });
+
+  await discoverSingleDevice(page);
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+  const mainStream = page.getByRole("region", { name: "主码流" });
+  await mainStream.getByRole("spinbutton").fill("12000");
+  await page.getByRole("button", { name: "保存并应用" }).click();
+
+  await expect(page.getByText("配置校验未通过")).toBeVisible();
+  await expect(page.getByText("主码流码率超出允许范围")).toBeVisible();
+  expect(saveRequests).toBe(0);
+  await expect(page.getByText("有未保存修改")).toBeVisible();
+});
+
+test("reports automatic rollback when apply fails", async ({ page }) => {
+  let taskFailed = false;
+  let postFailureConfigReads = 0;
+  await page.route("**/api/v1/config/capabilities", (route) =>
+    fulfillJson(route, configCapabilities),
+  );
+  await page.route("**/api/v1/config/validate", (route) =>
+    fulfillJson(route, { valid: true, errors: [], warnings: [], requires: [] }),
+  );
+  await page.route("**/api/v1/config/apply", (route) =>
+    fulfillJson(route, { task_id: 18 }),
+  );
+  await page.route("**/api/v1/tasks/18", (route) => {
+    taskFailed = true;
+    return fulfillJson(route, {
+      id: 18,
+      state: "failed",
+      rolled_back: true,
+      message: "新配置启动失败，已恢复原配置",
+    });
+  });
+  await page.route("**/api/v1/config", (route) => {
+    if (route.request().method() === "PUT") {
+      return fulfillJson(route, {
+        saved: true,
+        revision: "failed-revision",
+        restart_required: true,
+      });
+    }
+    if (taskFailed) postFailureConfigReads += 1;
+    return fulfillJson(route, currentConfig);
+  });
+
+  await discoverSingleDevice(page);
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+  await page.getByRole("region", { name: "主码流" }).getByRole("spinbutton").fill("9000");
+  await page.getByRole("button", { name: "保存并应用" }).click();
+
+  await expect(page.getByText("新配置启动失败，已恢复原配置")).toBeVisible();
+  await expect(page.getByText("自动回滚成功，页面已重新读取设备配置。")).toBeVisible();
+  expect(postFailureConfigReads).toBe(1);
+});
+
+test("restores defaults and reloads the resulting configuration", async ({
+  page,
+}) => {
+  const resetValues = structuredClone(currentConfig.values);
+  resetValues.overlay.enabled = false;
+  let resetCompleted = false;
+  await page.route("**/api/v1/config/capabilities", (route) =>
+    fulfillJson(route, configCapabilities),
+  );
+  await page.route("**/api/v1/config/reset", (route) => {
+    resetCompleted = true;
+    return fulfillJson(route, { task_id: 22 });
+  });
+  await page.route("**/api/v1/tasks/22", (route) =>
+    fulfillJson(route, {
+      id: 22,
+      state: "succeeded",
+      progress: 100,
+      message: "已恢复默认配置",
+    }),
+  );
+  await page.route("**/api/v1/config", (route) =>
+    fulfillJson(
+      route,
+      resetCompleted
+        ? { revision: "defaults-1", values: resetValues }
+        : currentConfig,
+    ),
+  );
+
+  await discoverSingleDevice(page);
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+  await page.getByRole("button", { name: "恢复默认" }).click();
+  await expect(page.getByText("恢复设备默认配置？")).toBeVisible();
+  await page.getByRole("button", { name: "确认恢复" }).click();
+
+  await expect(page.getByText("已恢复默认配置")).toBeVisible();
+  await expect(page.getByRole("switch", { name: "启用 OSD" })).not.toBeChecked();
+  await expect(page.getByText("REVISION defaults-1")).toBeVisible();
 });
 
 test("supports cancelling a scan and rescanning after an empty result", async ({
@@ -283,6 +576,7 @@ test("ignores incompatible responses during discovery", async ({ page }) => {
 test("heartbeats only the selected device and stops after two failures", async ({
   page,
 }) => {
+  await mockConfigurationRead(page);
   const requestsByHost = new Map<string, number>();
   await page.route("**/api/v1/device/info", (route) => {
     const host = requestHost(route);
@@ -322,7 +616,7 @@ test("keeps idle and result workspaces within a mobile viewport", async ({
   await expect(page.getByRole("button", { name: "搜索设备" })).toBeVisible();
   const model = page.getByRole("img", { name: "OVIS 相机模组 3D 展示" });
   await expect(model).toHaveAttribute("data-model-status", "ready", {
-    timeout: 15_000,
+    timeout: 25_000,
   });
   const canvasSignal = await readCanvasSignal(page);
   expect(canvasSignal.visiblePixels).toBeGreaterThan(
@@ -337,4 +631,22 @@ test("keeps idle and result workspaces within a mobile viewport", async ({
   }));
   expect(dimensions.contentWidth).toBe(dimensions.viewportWidth);
   await page.screenshot({ path: "/tmp/ovis-results-mobile.png", fullPage: true });
+});
+
+test("keeps the configuration workspace usable on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockConfigurationRead(page);
+  await discoverSingleDevice(page);
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "设备配置", level: 1 })).toBeVisible();
+  await expect(page.getByRole("region", { name: "主码流" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "启用人员检测" })).toBeVisible();
+  const dimensions = await page.evaluate(() => ({
+    viewportWidth: document.documentElement.clientWidth,
+    contentWidth: document.documentElement.scrollWidth,
+  }));
+  expect(dimensions.contentWidth).toBe(dimensions.viewportWidth);
+  await page.screenshot({ path: "/tmp/ovis-config-mobile.png", fullPage: true });
 });

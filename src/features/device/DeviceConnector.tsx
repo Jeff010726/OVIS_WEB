@@ -10,7 +10,7 @@ import {
   Square,
 } from "lucide-react";
 import { ErrorMessage } from "../../components/ErrorMessage";
-import { DeviceSummary } from "./DeviceSummary";
+import { DeviceConfiguration } from "../config/DeviceConfiguration";
 import { DEVICE_HOSTS } from "./device.api";
 import { getDeviceImage } from "./device.assets";
 import type {
@@ -63,9 +63,9 @@ export function DeviceConnector({
 }: DeviceConnectorProps) {
   if (state === "connected" && device && selectedDevice) {
     return (
-      <DeviceSummary
+      <DeviceConfiguration
         device={device}
-        apiBaseUrl={selectedDevice.apiBaseUrl}
+        selectedDevice={selectedDevice}
         connectedAt={connectedAt}
         onDisconnect={onDisconnect}
         onRescan={onRescan}
