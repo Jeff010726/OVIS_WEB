@@ -3,6 +3,7 @@ export type DeviceState =
   | "scanning"
   | "results"
   | "connecting"
+  | "recovering"
   | "connected"
   | "error";
 
@@ -42,6 +43,7 @@ export interface UseDeviceConnection {
   device: OvisDeviceInfo | null;
   error: DeviceConnectionErrorCode | null;
   connectedAt: Date | null;
+  applicationLocked: boolean;
   scan(): Promise<void>;
   cancelScan(): void;
   selectDevice(deviceId: string): void;
@@ -49,4 +51,6 @@ export interface UseDeviceConnection {
   disconnect(): void;
   rescan(): Promise<void>;
   retry(): Promise<void>;
+  setApplicationLocked(locked: boolean): void;
+  adoptRecoveredDevice(apiBaseUrl: string, info: OvisDeviceInfo): void;
 }

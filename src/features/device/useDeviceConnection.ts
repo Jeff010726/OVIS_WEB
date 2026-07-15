@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  clearPendingConfigApplication,
+  readPendingConfigApplication,
+} from "../config/config.session";
+import { reconnectConfigDevice } from "../config/config.recovery";
+import {
   DeviceConnectionError,
   discoverDevices,
   fetchDeviceInfo,
@@ -23,16 +28,21 @@ interface ConnectedTarget {
 
 export function useDeviceConnection(): UseDeviceConnection {
   const browserSupported = isSupportedBrowser();
+  const startupPending = useMemo(() => readPendingConfigApplication(), []);
   const [state, setState] = useState<DeviceState>(
-    browserSupported ? "idle" : "error",
+    startupPending ? "recovering" : browserSupported ? "idle" : "error",
   );
   const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [device, setDevice] = useState<OvisDeviceInfo | null>(null);
   const [error, setError] = useState<DeviceConnectionErrorCode | null>(
-    browserSupported ? null : "UNSUPPORTED_BROWSER",
+    startupPending || browserSupported ? null : "UNSUPPORTED_BROWSER",
   );
   const [connectedAt, setConnectedAt] = useState<Date | null>(null);
+  const [applicationLocked, setApplicationLockedState] = useState(
+    startupPending !== null,
+  );
+  const applicationLockedRef = useRef(startupPending !== null);
   const operationGeneration = useRef(0);
   const scanController = useRef<AbortController | null>(null);
   const devicesRef = useRef<DiscoveredDevice[]>([]);
@@ -43,13 +53,63 @@ export function useDeviceConnection(): UseDeviceConnection {
     setDevices(nextDevices);
   }, []);
 
+  const setApplicationLocked = useCallback((locked: boolean) => {
+    applicationLockedRef.current = locked;
+    setApplicationLockedState(locked);
+  }, []);
+
+  const adoptRecoveredDevice = useCallback(
+    (apiBaseUrl: string, info: OvisDeviceInfo) => {
+      const recoveredDevice: DiscoveredDevice = {
+        apiBaseUrl,
+        info,
+        status: "online",
+      };
+      const withoutRecovered = devicesRef.current.filter(
+        (entry) => entry.info.device_id !== info.device_id,
+      );
+      updateDevices([recoveredDevice, ...withoutRecovered]);
+      setSelectedDeviceId(info.device_id);
+      setDevice(info);
+      setError(null);
+      setConnectedAt(new Date());
+      connectedTarget.current = { apiBaseUrl, deviceId: info.device_id };
+      setState("connected");
+    },
+    [updateDevices],
+  );
+
   const selectedDevice = useMemo(
     () =>
       devices.find((entry) => entry.info.device_id === selectedDeviceId) ?? null,
     [devices, selectedDeviceId],
   );
 
+  useEffect(() => {
+    if (!startupPending) return;
+    const controller = new AbortController();
+    operationGeneration.current += 1;
+    setState("recovering");
+    setApplicationLocked(true);
+
+    void reconnectConfigDevice(startupPending, controller.signal)
+      .then((recovered) => {
+        if (controller.signal.aborted) return;
+        adoptRecoveredDevice(recovered.apiBaseUrl, recovered.info);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        clearPendingConfigApplication();
+        setApplicationLocked(false);
+        setError("NETWORK_ERROR");
+        setState("error");
+      });
+
+    return () => controller.abort();
+  }, [adoptRecoveredDevice, setApplicationLocked, startupPending]);
+
   const scan = useCallback(async () => {
+    if (applicationLockedRef.current) return;
     scanController.current?.abort();
     const generation = operationGeneration.current + 1;
     operationGeneration.current = generation;
@@ -80,6 +140,7 @@ export function useDeviceConnection(): UseDeviceConnection {
   }, [updateDevices]);
 
   const cancelScan = useCallback(() => {
+    if (applicationLockedRef.current) return;
     scanController.current?.abort();
     scanController.current = null;
     operationGeneration.current += 1;
@@ -88,11 +149,13 @@ export function useDeviceConnection(): UseDeviceConnection {
   }, []);
 
   const selectDevice = useCallback((deviceId: string) => {
+    if (applicationLockedRef.current) return;
     setSelectedDeviceId(deviceId);
     setError(null);
   }, []);
 
   const connect = useCallback(async () => {
+    if (applicationLockedRef.current) return;
     const target = devicesRef.current.find(
       (entry) => entry.info.device_id === selectedDeviceId,
     );
@@ -138,6 +201,7 @@ export function useDeviceConnection(): UseDeviceConnection {
   }, [selectedDeviceId, updateDevices]);
 
   const disconnect = useCallback(() => {
+    if (applicationLockedRef.current) return;
     operationGeneration.current += 1;
     connectedTarget.current = null;
     setState(devicesRef.current.length > 0 ? "results" : "idle");
@@ -147,10 +211,12 @@ export function useDeviceConnection(): UseDeviceConnection {
   }, []);
 
   const rescan = useCallback(async () => {
+    if (applicationLockedRef.current) return;
     await scan();
   }, [scan]);
 
   const retry = useCallback(async () => {
+    if (applicationLockedRef.current) return;
     if (selectedDeviceId) {
       await connect();
       return;
@@ -159,7 +225,13 @@ export function useDeviceConnection(): UseDeviceConnection {
   }, [connect, scan, selectedDeviceId]);
 
   useEffect(() => {
-    if (state !== "connected" || !connectedTarget.current) return;
+    if (
+      state !== "connected" ||
+      !connectedTarget.current ||
+      applicationLocked
+    ) {
+      return;
+    }
 
     const generation = operationGeneration.current;
     const target = connectedTarget.current;
@@ -202,7 +274,7 @@ export function useDeviceConnection(): UseDeviceConnection {
     }, HEARTBEAT_INTERVAL_MS);
 
     return () => window.clearInterval(heartbeat);
-  }, [state, updateDevices]);
+  }, [applicationLocked, state, updateDevices]);
 
   useEffect(
     () => () => {
@@ -219,6 +291,7 @@ export function useDeviceConnection(): UseDeviceConnection {
     device,
     error,
     connectedAt,
+    applicationLocked,
     scan,
     cancelScan,
     selectDevice,
@@ -226,5 +299,7 @@ export function useDeviceConnection(): UseDeviceConnection {
     disconnect,
     rescan,
     retry,
+    setApplicationLocked,
+    adoptRecoveredDevice,
   };
 }

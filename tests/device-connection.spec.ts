@@ -132,8 +132,12 @@ const fulfillJson = (route: Route, body: unknown) =>
     body: JSON.stringify(body),
   });
 
-async function discoverSingleDevice(page: Page) {
+async function discoverSingleDevice(
+  page: Page,
+  deviceInfoHandler?: (route: Route) => Promise<unknown>,
+) {
   await page.route("**/api/v1/device/info", (route) => {
+    if (deviceInfoHandler) return deviceInfoHandler(route);
     if (requestHost(route) === "192.168.42.1") {
       return fulfillJson(route, deviceInfo);
     }
@@ -303,6 +307,8 @@ test("edits, validates, saves, applies, and polls configuration", async ({
   let savePayload: Record<string, unknown> | null = null;
   let applyPayload: Record<string, unknown> | null = null;
   let taskRequests = 0;
+  let applyStarted = false;
+  let reconnectRequests = 0;
 
   await page.route("**/api/v1/config/capabilities", (route) =>
     fulfillJson(route, configCapabilities),
@@ -318,28 +324,18 @@ test("edits, validates, saves, applies, and polls configuration", async ({
   });
   await page.route("**/api/v1/config/apply", async (route) => {
     applyPayload = await route.request().postDataJSON();
+    applyStarted = true;
     return fulfillJson(route, { task_id: 12 });
   });
   await page.route("**/api/v1/tasks/12", (route) => {
     taskRequests += 1;
-    return fulfillJson(
-      route,
-      taskRequests === 1
-        ? {
-            id: 12,
-            state: "running",
-            stage: "restarting_ipcamera",
-            progress: 60,
-            message: "正在重启视频服务",
-          }
-        : {
-            id: 12,
-            state: "succeeded",
-            stage: "completed",
-            progress: 100,
-            message: "配置应用成功",
-          },
-    );
+    return fulfillJson(route, {
+      id: 12,
+      state: "succeeded",
+      stage: "completed",
+      progress: 100,
+      message: "配置应用成功",
+    });
   });
   await page.route("**/api/v1/config", async (route) => {
     if (route.request().method() === "PUT") {
@@ -357,7 +353,15 @@ test("edits, validates, saves, applies, and polls configuration", async ({
     return fulfillJson(route, { revision: activeRevision, values: savedValues });
   });
 
-  await discoverSingleDevice(page);
+  await discoverSingleDevice(page, async (route) => {
+    if (requestHost(route) !== "192.168.42.1") {
+      return route.abort("connectionrefused");
+    }
+    if (!applyStarted) return fulfillJson(route, deviceInfo);
+    reconnectRequests += 1;
+    if (reconnectRequests <= 2) return route.abort("connectionrefused");
+    return fulfillJson(route, deviceInfo);
+  });
   await page.getByRole("radio").click();
   await page.getByRole("button", { name: "连接", exact: true }).click();
   const mainStream = page.getByRole("region", { name: "主码流" });
@@ -370,16 +374,181 @@ test("edits, validates, saves, applies, and polls configuration", async ({
   await expect(saveButton).toBeEnabled();
   await saveButton.click();
 
-  await expect(page.getByText("正在重启视频服务")).toBeVisible();
-  await expect(page.getByText("配置应用成功")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("配置已保存，设备正在重启").first()).toBeVisible();
+  await expect(page.getByTitle("重新搜索")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "恢复默认" })).toBeDisabled();
+  const pendingApplication = await page.evaluate(() =>
+    JSON.parse(
+      sessionStorage.getItem("ovis_pending_config_application") ?? "null",
+    ),
+  );
+  expect(pendingApplication).toMatchObject({
+    device_id: deviceInfo.device_id,
+    api_base_url: "http://192.168.42.1:8080/api/v1",
+    task_id: 12,
+    target_revision: "b929d204",
+  });
+  await expect(page.getByText("正在等待设备恢复连接")).toBeVisible();
+  await expect(page.getByText("设备重启中")).toBeVisible();
+  await expect(page.getByText("等待设备确认")).toBeVisible();
+  await page.screenshot({
+    path: "/tmp/ovis-config-reconnecting-desktop.png",
+    fullPage: true,
+  });
+  await expect(page.getByText("配置应用成功")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("配置已同步")).toBeVisible();
-  expect(taskRequests).toBe(2);
+  expect(taskRequests).toBe(1);
+  expect(reconnectRequests).toBe(3);
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("ovis_pending_config_application"),
+    ),
+  ).toBeNull();
   expect(validatePayload).toMatchObject({
     revision: "a81f36c2",
     values: { video: { main: { bitrate_kbps: 9000 } }, overlay: { enabled: false } },
   });
   expect(savePayload).toEqual(validatePayload);
   expect(applyPayload).toEqual({ revision: "b929d204" });
+});
+
+test("searches the address pool and reconnects only the original device id", async ({
+  page,
+}) => {
+  let applyStarted = false;
+  let activeRevision = currentConfig.revision;
+  await page.route("**/api/v1/config/capabilities", (route) =>
+    fulfillJson(route, configCapabilities),
+  );
+  await page.route("**/api/v1/config/validate", (route) =>
+    fulfillJson(route, { valid: true, errors: [], warnings: [], requires: [] }),
+  );
+  await page.route("**/api/v1/config/apply", (route) => {
+    applyStarted = true;
+    return fulfillJson(route, { task_id: 28 });
+  });
+  await page.route("**/api/v1/tasks/28", (route) =>
+    fulfillJson(route, {
+      id: 28,
+      state: "succeeded",
+      progress: 100,
+      message: "配置应用成功",
+    }),
+  );
+  await page.route("**/api/v1/config", (route) => {
+    if (route.request().method() === "PUT") {
+      activeRevision = "moved-revision";
+      return fulfillJson(route, {
+        saved: true,
+        revision: activeRevision,
+        restart_required: true,
+      });
+    }
+    return fulfillJson(route, { revision: activeRevision, values: currentConfig.values });
+  });
+
+  await discoverSingleDevice(page, async (route) => {
+    const host = requestHost(route);
+    if (!applyStarted) {
+      return host === "192.168.42.1"
+        ? fulfillJson(route, deviceInfo)
+        : route.abort("connectionrefused");
+    }
+    if (host === "192.168.43.1") return fulfillJson(route, secondDeviceInfo);
+    if (host === "192.168.44.1") return fulfillJson(route, deviceInfo);
+    return route.abort("connectionrefused");
+  });
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+  await page.getByRole("region", { name: "主码流" }).getByRole("spinbutton").fill("9000");
+  await page.getByRole("button", { name: "保存并应用" }).click();
+
+  await expect(page.getByText("正在等待设备恢复连接")).toBeVisible();
+  await expect(page.getByText("配置应用成功")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("192.168.44.1:8080/api/v1")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "OVIS Camera B" })).toHaveCount(0);
+});
+
+test("resumes a pending application after refresh and accepts a missing task", async ({
+  page,
+}) => {
+  await page.addInitScript(
+    ({ info }) => {
+      sessionStorage.setItem(
+        "ovis_pending_config_application",
+        JSON.stringify({
+          device_id: info.device_id,
+          api_base_url: "http://192.168.42.1:8080/api/v1",
+          task_id: 31,
+          target_revision: "resume-revision",
+          started_at: Date.now(),
+        }),
+      );
+    },
+    { info: deviceInfo },
+  );
+  await page.route("**/api/v1/device/info", async (route) => {
+    if (requestHost(route) !== "192.168.42.1") {
+      return route.abort("connectionrefused");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return fulfillJson(route, deviceInfo);
+  });
+  await page.route("**/api/v1/config/capabilities", (route) =>
+    fulfillJson(route, configCapabilities),
+  );
+  await page.route("**/api/v1/tasks/31", (route) => route.fulfill({ status: 404 }));
+  await page.route("**/api/v1/config", (route) =>
+    fulfillJson(route, {
+      revision: "resume-revision",
+      values: currentConfig.values,
+    }),
+  );
+
+  await page.goto("./");
+  await expect(page.getByText("正在恢复设备连接")).toBeVisible();
+  await expect(page.getByText("配置应用成功")).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByRole("heading", { name: "OVIS Camera" })).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("ovis_pending_config_application"),
+    ),
+  ).toBeNull();
+});
+
+test("fails verification when the target revision is not active", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/config/capabilities", (route) =>
+    fulfillJson(route, configCapabilities),
+  );
+  await page.route("**/api/v1/config/validate", (route) =>
+    fulfillJson(route, { valid: true, errors: [], warnings: [], requires: [] }),
+  );
+  await page.route("**/api/v1/config/apply", (route) =>
+    fulfillJson(route, { task_id: 38 }),
+  );
+  await page.route("**/api/v1/tasks/38", (route) => route.fulfill({ status: 404 }));
+  await page.route("**/api/v1/config", (route) => {
+    if (route.request().method() === "PUT") {
+      return fulfillJson(route, {
+        saved: true,
+        revision: "target-not-active",
+        restart_required: true,
+      });
+    }
+    return fulfillJson(route, currentConfig);
+  });
+
+  await discoverSingleDevice(page);
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+  await page.getByRole("region", { name: "主码流" }).getByRole("spinbutton").fill("9000");
+  await page.getByRole("button", { name: "保存并应用" }).click();
+
+  await expect(page.getByText("配置未生效或已自动回滚")).toBeVisible({
+    timeout: 6_000,
+  });
 });
 
 test("shows server validation errors without saving", async ({ page }) => {

@@ -32,8 +32,11 @@ interface DeviceConfigurationProps {
   device: OvisDeviceInfo;
   selectedDevice: DiscoveredDevice;
   connectedAt: Date | null;
+  applicationLocked: boolean;
   onDisconnect: () => void;
   onRescan: () => void;
+  onApplicationLockChange: (locked: boolean) => void;
+  onDeviceRecovered: (apiBaseUrl: string, info: OvisDeviceInfo) => void;
 }
 
 interface ToggleProps {
@@ -271,9 +274,10 @@ function DetectionRow({
 }
 
 const busyStatusLabel = {
-  validating: "正在校验配置",
   saving: "正在保存配置",
-  applying: "正在应用配置",
+  restart_pending: "配置已保存，设备正在重启",
+  reconnecting: "正在等待设备恢复连接",
+  verifying: "设备已恢复，正在确认配置",
   resetting: "正在恢复默认配置",
 } as const;
 
@@ -281,17 +285,27 @@ export function DeviceConfiguration({
   device,
   selectedDevice,
   connectedAt,
+  applicationLocked,
   onDisconnect,
   onRescan,
+  onApplicationLockChange,
+  onDeviceRecovered,
 }: DeviceConfigurationProps) {
-  const configuration = useDeviceConfiguration(selectedDevice.apiBaseUrl);
+  const configuration = useDeviceConfiguration({
+    apiBaseUrl: selectedDevice.apiBaseUrl,
+    deviceId: device.device_id,
+    onApplicationLockChange,
+    onDeviceRecovered,
+  });
   const [confirmReset, setConfirmReset] = useState(false);
   const productImage = getDeviceImage(device.model);
   const issues = configuration.validation?.errors ?? [];
-  const isBusy = ["validating", "saving", "applying", "resetting"].includes(
-    configuration.status,
-  );
-  const activeStatus = configuration.status as keyof typeof busyStatusLabel;
+  const isBusy = configuration.applicationBusy || configuration.status === "resetting";
+  const activeStatus = (
+    configuration.status === "resetting"
+      ? "resetting"
+      : configuration.applicationState
+  ) as keyof typeof busyStatusLabel;
   const taskProgress = Math.min(100, Math.max(0, configuration.task?.progress ?? 0));
 
   const detectionRows = useMemo(() => {
@@ -361,7 +375,9 @@ export function DeviceConfiguration({
 
   return (
     <div className="configuration-page">
-      <header className="connected-device-bar">
+      <header
+        className={`connected-device-bar ${applicationLocked || isBusy ? "connected-device-bar--recovering" : ""}`}
+      >
         <div className="connected-device-bar__image">
           {productImage ? (
             <img src={productImage} alt={`${device.name} 产品图`} />
@@ -370,7 +386,10 @@ export function DeviceConfiguration({
           )}
         </div>
         <div className="connected-device-bar__identity">
-          <div className="eyebrow"><Wifi size={12} /> CONNECTED DEVICE</div>
+          <div className="eyebrow">
+            <Wifi size={12} />
+            {applicationLocked || isBusy ? "TARGET DEVICE · RECONNECTING" : "CONNECTED DEVICE"}
+          </div>
           <h2>{device.name}</h2>
           <p>{device.model} · {device.serial}</p>
         </div>
@@ -380,10 +399,10 @@ export function DeviceConfiguration({
           <div><dt>连接时间</dt><dd>{formatConnectionTime(connectedAt)}</dd></div>
         </dl>
         <div className="connected-device-bar__actions">
-          <button className="icon-button" type="button" onClick={onRescan} title="重新搜索">
+          <button className="icon-button" type="button" onClick={onRescan} title="重新搜索" disabled={applicationLocked || isBusy}>
             <RefreshCw size={16} />
           </button>
-          <button className="icon-button" type="button" onClick={onDisconnect} title="断开连接">
+          <button className="icon-button" type="button" onClick={onDisconnect} title="断开连接" disabled={applicationLocked || isBusy}>
             <Unplug size={16} />
           </button>
         </div>
@@ -392,8 +411,18 @@ export function DeviceConfiguration({
       {configuration.status === "loading" && (
         <div className="configuration-loading" aria-live="polite">
           <LoaderCircle size={25} />
-          <strong>正在读取设备配置</strong>
-          <span>同时获取能力范围与当前值</span>
+          <strong>
+            {configuration.applicationState === "reconnecting"
+              ? "正在恢复设备连接"
+              : configuration.applicationState === "verifying"
+                ? "正在确认配置应用结果"
+                : "正在读取设备配置"}
+          </strong>
+          <span>
+            {configuration.applicationState === "reconnecting"
+              ? "只会重新连接相同 device_id 的设备"
+              : "同时获取能力范围与当前值"}
+          </span>
         </div>
       )}
 
@@ -415,14 +444,18 @@ export function DeviceConfiguration({
               <div className="eyebrow">CONFIGURATION · SCHEMA {configuration.capabilities.schema_version}</div>
               <h3>设备配置</h3>
               <span className={`draft-state ${configuration.hasChanges ? "draft-state--dirty" : ""}`}>
-                {configuration.hasChanges ? "有未保存修改" : "配置已同步"}
+                {configuration.applicationBusy
+                  ? "等待设备确认"
+                  : configuration.hasChanges
+                    ? "有未保存修改"
+                    : "配置已同步"}
               </span>
             </div>
             <div className="configuration-toolbar__actions">
               <button
                 className="button button--ghost"
                 type="button"
-                disabled={isBusy}
+              disabled={isBusy}
                 onClick={() => setConfirmReset(true)}
               >
                 <RotateCcw size={15} />恢复默认
@@ -466,7 +499,11 @@ export function DeviceConfiguration({
               <div>
                 <LoaderCircle size={16} />
                 <strong>{busyStatusLabel[activeStatus]}</strong>
-                <span>{configuration.task?.message ?? "请保持设备连接"}</span>
+                <span>
+                  {configuration.applicationState === "restart_pending"
+                    ? "配置已保存，设备正在重启"
+                    : configuration.task?.message ?? "网络中断不会立即判定失败"}
+                </span>
                 {configuration.task?.progress !== undefined && <output>{taskProgress}%</output>}
               </div>
               <span className="operation-progress__track">
@@ -587,7 +624,11 @@ export function DeviceConfiguration({
 
           <footer className="configuration-footer">
             <span>REVISION {configuration.revision}</span>
-            <span>所有配置请求发送至当前连接设备</span>
+            <span>
+              {configuration.targetRevision
+                ? `TARGET ${configuration.targetRevision}`
+                : "所有配置请求发送至当前连接设备"}
+            </span>
           </footer>
         </main>
       )}

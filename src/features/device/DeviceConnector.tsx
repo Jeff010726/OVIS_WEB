@@ -29,6 +29,7 @@ interface DeviceConnectorProps {
   device: OvisDeviceInfo | null;
   error: DeviceConnectionErrorCode | null;
   connectedAt: Date | null;
+  applicationLocked: boolean;
   onScan: () => void;
   onCancelScan: () => void;
   onSelectDevice: (deviceId: string) => void;
@@ -36,6 +37,8 @@ interface DeviceConnectorProps {
   onDisconnect: () => void;
   onRescan: () => void;
   onRetry: () => void;
+  onApplicationLockChange: (locked: boolean) => void;
+  onDeviceRecovered: (apiBaseUrl: string, info: OvisDeviceInfo) => void;
 }
 
 const endpointLabel = (apiBaseUrl: string) => {
@@ -53,6 +56,7 @@ export function DeviceConnector({
   device,
   error,
   connectedAt,
+  applicationLocked,
   onScan,
   onCancelScan,
   onSelectDevice,
@@ -60,6 +64,8 @@ export function DeviceConnector({
   onDisconnect,
   onRescan,
   onRetry,
+  onApplicationLockChange,
+  onDeviceRecovered,
 }: DeviceConnectorProps) {
   if (state === "connected" && device && selectedDevice) {
     return (
@@ -67,8 +73,11 @@ export function DeviceConnector({
         device={device}
         selectedDevice={selectedDevice}
         connectedAt={connectedAt}
+        applicationLocked={applicationLocked}
         onDisconnect={onDisconnect}
         onRescan={onRescan}
+        onApplicationLockChange={onApplicationLockChange}
+        onDeviceRecovered={onDeviceRecovered}
       />
     );
   }
@@ -103,6 +112,19 @@ export function DeviceConnector({
           <Square size={13} fill="currentColor" />
           取消搜索
         </button>
+      </div>
+    );
+  }
+
+  if (state === "recovering") {
+    return (
+      <div className="connector-state connector-state--loading" aria-live="polite">
+        <div className="loading-spinner" aria-hidden="true">
+          <LoaderCircle size={28} />
+        </div>
+        <h2>正在恢复设备连接</h2>
+        <p>继续确认刷新前尚未完成的配置应用</p>
+        <small>仅连接原设备 · 最长等待 90 秒</small>
       </div>
     );
   }

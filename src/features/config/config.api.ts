@@ -21,7 +21,10 @@ interface ConfigRequestOptions {
 }
 
 export class ConfigRequestError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    public readonly status?: number,
+  ) {
     super(message);
     this.name = "ConfigRequestError";
   }
@@ -53,7 +56,10 @@ async function requestConfigApi<T>(
       requestOptions,
     );
     if (!response.ok) {
-      throw new ConfigRequestError(`设备接口返回 HTTP ${response.status}`);
+      throw new ConfigRequestError(
+        `设备接口返回 HTTP ${response.status}`,
+        response.status,
+      );
     }
 
     try {

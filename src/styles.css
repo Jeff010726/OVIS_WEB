@@ -120,6 +120,7 @@ a:focus-visible {
 }
 
 .status-indicator--scanning .status-indicator__dot,
+.status-indicator--recovering .status-indicator__dot,
 .status-indicator--connecting .status-indicator__dot {
   background: #ececec;
   animation: status-pulse 1s ease-in-out infinite;
@@ -259,6 +260,11 @@ a:focus-visible {
   font-size: 13px;
   font-weight: 560;
   transition: 160ms ease;
+}
+
+.button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 .button--primary {
@@ -852,6 +858,10 @@ a:focus-visible {
   color: var(--success);
 }
 
+.connected-device-bar--recovering .connected-device-bar__identity .eyebrow {
+  color: #d0d0d0;
+}
+
 .connected-device-bar__identity h2 {
   margin: 9px 0 6px;
   font-size: 23px;
@@ -916,6 +926,13 @@ a:focus-visible {
   color: var(--text);
   border-color: #5a5a5a;
   background: #181818;
+}
+
+.icon-button:disabled {
+  color: #494949;
+  border-color: #242424;
+  background: #0d0d0d;
+  cursor: not-allowed;
 }
 
 .configuration-loading {

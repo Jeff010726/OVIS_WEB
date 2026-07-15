@@ -107,11 +107,17 @@ export interface ConfigTask {
 export type ConfigurationStatus =
   | "loading"
   | "ready"
-  | "validating"
-  | "saving"
-  | "applying"
   | "resetting"
   | "error";
+
+export type ConfigApplicationState =
+  | "idle"
+  | "saving"
+  | "restart_pending"
+  | "reconnecting"
+  | "verifying"
+  | "success"
+  | "failed";
 
 export interface ConfigurationOutcome {
   type: "success" | "error";
