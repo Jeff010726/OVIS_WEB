@@ -175,6 +175,12 @@ test("scans with at most four requests and deduplicates device ids", async ({
   expect(imageMetrics.complete).toBe(true);
   expect(imageMetrics.naturalWidth).toBe(978);
   expect(imageMetrics.renderedWidth).toBeGreaterThan(200);
+  const imageBottomGap = await productImages.first().evaluate((image) => {
+    const imageBounds = image.getBoundingClientRect();
+    const visualBounds = image.parentElement!.getBoundingClientRect();
+    return visualBounds.bottom - imageBounds.bottom;
+  });
+  expect(imageBottomGap).toBeGreaterThanOrEqual(14);
   expect(requestedHosts.size).toBe(16);
   expect(maximumActiveRequests).toBeGreaterThan(1);
   expect(maximumActiveRequests).toBeLessThanOrEqual(4);

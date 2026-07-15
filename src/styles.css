@@ -435,7 +435,7 @@ a:focus-visible {
 
 .device-result {
   width: 100%;
-  height: 320px;
+  height: 336px;
   min-width: 0;
   padding: 0;
   display: flex;
@@ -462,8 +462,8 @@ a:focus-visible {
 
 .device-result__visual {
   width: 100%;
-  height: 218px;
-  flex: 0 0 218px;
+  height: 230px;
+  flex: 0 0 230px;
   position: relative;
   display: grid;
   place-items: center;
@@ -473,17 +473,18 @@ a:focus-visible {
 }
 
 .device-result__visual img {
-  width: 92%;
-  height: 92%;
+  width: auto;
+  height: 198px;
+  max-width: 86%;
   display: block;
   object-fit: contain;
+  object-position: center;
   filter: brightness(0.9) contrast(1.04);
-  transition: transform 220ms ease, filter 220ms ease;
+  transition: filter 220ms ease;
 }
 
 .device-result:hover .device-result__visual img,
 .device-result[aria-checked="true"] .device-result__visual img {
-  transform: scale(1.025);
   filter: brightness(1) contrast(1.04);
 }
 
@@ -956,7 +957,7 @@ a:focus-visible {
   }
 
   .device-result {
-    height: 326px;
+    height: 342px;
   }
 
   .device-results {
@@ -965,8 +966,8 @@ a:focus-visible {
   }
 
   .device-result__visual {
-    height: 224px;
-    flex-basis: 224px;
+    height: 240px;
+    flex-basis: 240px;
   }
 
   .discovery-actions {
