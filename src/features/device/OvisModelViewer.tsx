@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
@@ -25,6 +26,7 @@ function disposeObject(root: THREE.Object3D) {
 }
 
 export default function OvisModelViewer() {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<ModelStatus>("loading");
 
@@ -160,7 +162,7 @@ export default function OvisModelViewer() {
       className="ovis-model-viewer"
       data-model-status={status}
       role="img"
-      aria-label="OVIS 相机模组 3D 展示"
+      aria-label={t("model.label")}
       aria-busy={status === "loading"}
     >
       {status === "loading" && (
@@ -168,7 +170,7 @@ export default function OvisModelViewer() {
           <LoaderCircle size={24} />
         </span>
       )}
-      {status === "error" && <span className="model-error">模型暂不可用</span>}
+      {status === "error" && <span className="model-error">{t("model.unavailable")}</span>}
     </div>
   );
 }

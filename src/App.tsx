@@ -1,19 +1,23 @@
+import { useTranslation } from "react-i18next";
 import { ConnectionStatus } from "./components/ConnectionStatus";
+import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import { DeviceConnector } from "./features/device/DeviceConnector";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
 
 function App() {
+  const { t } = useTranslation();
   const connection = useDeviceConnection();
 
   return (
     <div className="app-shell">
       <header className="app-header">
-        <a className="brand" href="./" aria-label="OVIS Manager 首页">
+        <a className="brand" href="./" aria-label={t("app.home")}>
           <span className="brand__wordmark">OVIS</span>
           <span className="brand__divider" />
           <span className="brand__product">DEVICE MANAGER</span>
         </a>
         <div className="app-header__actions">
+          <LanguageSwitcher />
           <ConnectionStatus
             state={connection.state}
             applicationLocked={connection.applicationLocked}
@@ -25,14 +29,14 @@ function App() {
         <div className="page-heading">
           <h1>
             {connection.state === "connected" || connection.state === "recovering"
-              ? "设备配置"
-              : "设备连接"}
+              ? t("app.configurationTitle")
+              : t("app.connectionTitle")}
           </h1>
         </div>
 
         <section
           className={`workspace-panel ${connection.state === "connected" ? "workspace-panel--configuration" : ""}`}
-          aria-label="设备连接工作区"
+          aria-label={t("app.workspace")}
         >
           <DeviceConnector
             state={connection.state}

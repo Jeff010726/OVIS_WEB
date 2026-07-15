@@ -7,6 +7,7 @@ import type {
   DeviceConfigDocument,
   SaveConfigResponse,
 } from "./config.types";
+import i18n from "../../i18n";
 
 const REQUEST_TIMEOUT_MS = 5_000;
 
@@ -57,7 +58,7 @@ async function requestConfigApi<T>(
     );
     if (!response.ok) {
       throw new ConfigRequestError(
-        `设备接口返回 HTTP ${response.status}`,
+        i18n.t("config.validation.httpError", { status: response.status }),
         response.status,
       );
     }
@@ -65,14 +66,14 @@ async function requestConfigApi<T>(
     try {
       return (await response.json()) as T;
     } catch {
-      throw new ConfigRequestError("设备返回了无效的配置数据");
+      throw new ConfigRequestError(i18n.t("config.validation.invalidData"));
     }
   } catch (error) {
     if (error instanceof ConfigRequestError) throw error;
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new ConfigRequestError("配置请求超时");
+      throw new ConfigRequestError(i18n.t("config.validation.requestTimeout"));
     }
-    throw new ConfigRequestError("无法访问设备配置接口");
+    throw new ConfigRequestError(i18n.t("config.validation.unreachable"));
   } finally {
     window.clearTimeout(timeout);
     options.signal?.removeEventListener("abort", abortFromParent);

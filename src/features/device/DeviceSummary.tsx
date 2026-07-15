@@ -1,4 +1,5 @@
 import { Cpu, Radio, RefreshCw, Unplug } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { OvisDeviceInfo } from "./device.types";
 
 interface DeviceSummaryProps {
@@ -9,9 +10,9 @@ interface DeviceSummaryProps {
   onRescan: () => void;
 }
 
-const formatConnectionTime = (value: Date | null) =>
+const formatConnectionTime = (value: Date | null, locale: string) =>
   value
-    ? new Intl.DateTimeFormat("zh-CN", {
+    ? new Intl.DateTimeFormat(locale, {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -32,16 +33,17 @@ export function DeviceSummary({
   onDisconnect,
   onRescan,
 }: DeviceSummaryProps) {
+  const { t, i18n } = useTranslation();
   const identityItems = [
-    ["设备型号", device.model],
-    ["设备名称", device.name],
-    ["唯一序列号", device.serial],
-    ["设备地址", formatEndpoint(apiBaseUrl)],
+    [t("summary.model"), device.model],
+    [t("summary.name"), device.name],
+    [t("summary.serial"), device.serial],
+    [t("summary.address"), formatEndpoint(apiBaseUrl)],
   ];
   const systemItems = [
-    ["固件版本", device.firmware_version],
-    ["Manager 版本", device.manager_version],
-    ["API 版本", `v${device.api_version}`],
+    [t("summary.firmware"), device.firmware_version],
+    [t("summary.manager"), device.manager_version],
+    [t("summary.api"), `v${device.api_version}`],
   ];
 
   return (
@@ -56,7 +58,7 @@ export function DeviceSummary({
         </div>
         <div className="device-identity__online">
           <span />
-          通信正常
+          {t("summary.healthy")}
         </div>
       </section>
 
@@ -64,7 +66,7 @@ export function DeviceSummary({
         <section className="info-section" aria-labelledby="identity-heading">
           <div className="info-section__heading">
             <span>01</span>
-            <h3 id="identity-heading">设备标识</h3>
+            <h3 id="identity-heading">{t("summary.identity")}</h3>
           </div>
           <dl>
             {identityItems.map(([label, value]) => (
@@ -79,7 +81,7 @@ export function DeviceSummary({
         <section className="info-section" aria-labelledby="system-heading">
           <div className="info-section__heading">
             <span>02</span>
-            <h3 id="system-heading">系统版本</h3>
+            <h3 id="system-heading">{t("summary.system")}</h3>
           </div>
           <dl>
             {systemItems.map(([label, value]) => (
@@ -95,8 +97,8 @@ export function DeviceSummary({
       <footer className="device-summary__footer">
         <div className="connection-time">
           <Cpu size={16} />
-          <span>本次连接</span>
-          <time>{formatConnectionTime(connectedAt)}</time>
+          <span>{t("summary.currentConnection")}</span>
+          <time>{formatConnectionTime(connectedAt, i18n.resolvedLanguage ?? "en")}</time>
         </div>
         <div className="device-summary__actions">
           <button
@@ -105,7 +107,7 @@ export function DeviceSummary({
             onClick={onRescan}
           >
             <RefreshCw size={15} />
-            重新搜索
+            {t("common.rescan")}
           </button>
           <button
             className="button button--secondary button--disconnect"
@@ -113,7 +115,7 @@ export function DeviceSummary({
             onClick={onDisconnect}
           >
             <Unplug size={16} />
-            断开连接
+            {t("summary.disconnect")}
           </button>
         </div>
       </footer>

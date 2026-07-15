@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ArrowRight,
   Cable,
@@ -67,6 +68,7 @@ export function DeviceConnector({
   onApplicationLockChange,
   onDeviceRecovered,
 }: DeviceConnectorProps) {
+  const { t } = useTranslation();
   if (state === "connected" && device && selectedDevice) {
     return (
       <DeviceConfiguration
@@ -88,7 +90,7 @@ export function DeviceConnector({
         <ErrorMessage
           code={error}
           onRetry={onRetry}
-          retryLabel={selectedDevice ? "重新连接" : "重新搜索"}
+          retryLabel={selectedDevice ? t("common.reconnect") : t("common.rescan")}
           onRescan={selectedDevice ? onRescan : undefined}
         />
       </div>
@@ -101,16 +103,16 @@ export function DeviceConnector({
         <div className="loading-spinner" aria-hidden="true">
           <LoaderCircle size={28} />
         </div>
-        <h2>正在搜索 OVIS 设备</h2>
-        <p>并发探测 {DEVICE_HOSTS.length} 个本地网络地址</p>
-        <small>每个地址最长等待 1.5 秒</small>
+        <h2>{t("discovery.scanningTitle")}</h2>
+        <p>{t("discovery.scanningDescription", { count: DEVICE_HOSTS.length })}</p>
+        <small>{t("discovery.scanningTimeout")}</small>
         <button
           className="button button--secondary loading-cancel"
           type="button"
           onClick={onCancelScan}
         >
           <Square size={13} fill="currentColor" />
-          取消搜索
+          {t("discovery.cancelScan")}
         </button>
       </div>
     );
@@ -122,9 +124,9 @@ export function DeviceConnector({
         <div className="loading-spinner" aria-hidden="true">
           <LoaderCircle size={28} />
         </div>
-        <h2>正在恢复设备连接</h2>
-        <p>继续确认刷新前尚未完成的配置应用</p>
-        <small>仅连接原设备 · 最长等待 90 秒</small>
+        <h2>{t("discovery.recoveringTitle")}</h2>
+        <p>{t("discovery.recoveringDescription")}</p>
+        <small>{t("discovery.recoveringTimeout")}</small>
       </div>
     );
   }
@@ -135,9 +137,9 @@ export function DeviceConnector({
         <div className="loading-spinner" aria-hidden="true">
           <LoaderCircle size={28} />
         </div>
-        <h2>正在连接 {selectedDevice.info.name}</h2>
-        <p>再次确认设备身份与 API 版本</p>
-        <small>{endpointLabel(selectedDevice.apiBaseUrl)} · 最长等待 3 秒</small>
+        <h2>{t("discovery.connectingTitle", { name: selectedDevice.info.name })}</h2>
+        <p>{t("discovery.connectingDescription")}</p>
+        <small>{t("discovery.connectingTimeout", { endpoint: endpointLabel(selectedDevice.apiBaseUrl) })}</small>
       </div>
     );
   }
@@ -147,17 +149,17 @@ export function DeviceConnector({
       <div className="connector-state connector-state--results">
         <header className="discovery-heading">
           <div>
-            <span className="eyebrow">LOCAL DEVICE DISCOVERY</span>
+            <span className="eyebrow">{t("discovery.eyebrow")}</span>
             <h2>
               {devices.length > 0
-                ? `发现 ${devices.length} 台 OVIS 设备`
-                : "未发现 OVIS 设备"}
+                ? t("discovery.found", { count: devices.length })
+                : t("discovery.noneFound")}
             </h2>
           </div>
           <p>
             {devices.length > 0
-              ? "选择一台设备后建立连接"
-              : "请检查设备供电与本地网络连接"}
+              ? t("discovery.selectPrompt")
+              : t("discovery.checkPrompt")}
           </p>
         </header>
 
@@ -165,7 +167,7 @@ export function DeviceConnector({
           <div
             className="device-results"
             role="radiogroup"
-            aria-label="搜索到的 OVIS 设备"
+            aria-label={t("discovery.resultList")}
           >
             {devices.map((entry) => {
               const selected =
@@ -186,7 +188,7 @@ export function DeviceConnector({
                     {deviceImage ? (
                       <img
                         src={deviceImage}
-                        alt={`${entry.info.name} 产品图`}
+                        alt={t("discovery.productImage", { name: entry.info.name })}
                         loading="lazy"
                       />
                     ) : (
@@ -199,7 +201,7 @@ export function DeviceConnector({
                       {selected && <Check size={13} strokeWidth={2.4} />}
                     </span>
                     <span className="device-result__status">
-                      {entry.status === "online" ? "在线" : "离线"}
+                      {entry.status === "online" ? t("discovery.online") : t("discovery.offline")}
                     </span>
                   </span>
                   <span className="device-result__details">
@@ -219,7 +221,7 @@ export function DeviceConnector({
         ) : (
           <div className="empty-results">
             <Search size={24} strokeWidth={1.4} aria-hidden="true" />
-            <span>地址池中没有设备响应</span>
+            <span>{t("discovery.empty")}</span>
           </div>
         )}
 
@@ -230,7 +232,7 @@ export function DeviceConnector({
             onClick={onRescan}
           >
             <RefreshCw size={15} />
-            重新搜索
+            {t("common.rescan")}
           </button>
           {devices.length > 0 && (
             <button
@@ -240,7 +242,7 @@ export function DeviceConnector({
               onClick={onConnect}
             >
               <Cable size={17} />
-              连接
+              {t("discovery.connect")}
               <ArrowRight className="button__arrow" size={16} />
             </button>
           )}
@@ -253,11 +255,11 @@ export function DeviceConnector({
     <div className="connector-state connector-state--idle">
       <div className="idle-layout">
         <div className="idle-copy">
-          <h2>搜索 OVIS 设备</h2>
-          <p>扫描本地设备网络 · API v1</p>
+          <h2>{t("discovery.idleTitle")}</h2>
+          <p>{t("discovery.idleDescription")}</p>
           <button className="button button--primary" type="button" onClick={onScan}>
             <Search size={18} />
-            搜索设备
+            {t("discovery.scan")}
             <ArrowRight className="button__arrow" size={17} />
           </button>
         </div>

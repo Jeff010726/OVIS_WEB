@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Activity,
   AlertTriangle,
@@ -65,9 +66,9 @@ function Toggle({ checked, disabled = false, label, onChange }: ToggleProps) {
 const endpointLabel = (apiBaseUrl: string) =>
   apiBaseUrl.replace(/^https?:\/\//, "");
 
-const formatConnectionTime = (value: Date | null) =>
+const formatConnectionTime = (value: Date | null, locale: string) =>
   value
-    ? new Intl.DateTimeFormat("zh-CN", {
+    ? new Intl.DateTimeFormat(locale, {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
@@ -115,6 +116,7 @@ function StreamEditor({
   issues,
   updateDraft,
 }: StreamEditorProps) {
+  const { t } = useTranslation();
   const options = profileOptions(profiles, values.profile);
   const activeProfile = profiles.find((profile) => profile.id === values.profile);
   const fpsOptions = activeProfile?.fps_options.length
@@ -147,11 +149,11 @@ function StreamEditor({
           <span>{streamKey === "main" ? "MAIN" : "SUB"}</span>
           <h4 id={`stream-${streamKey}`}>{title}</h4>
         </div>
-        {disabled && <small>已关闭</small>}
+        {disabled && <small>{t("common.disabled")}</small>}
       </div>
       <div className="config-fields">
         <label className="config-field">
-          <span>分辨率预设</span>
+          <span>{t("config.stream.resolution")}</span>
           <select
             value={values.profile}
             disabled={disabled || options.length === 0}
@@ -166,7 +168,7 @@ function StreamEditor({
           </select>
         </label>
         <label className="config-field">
-          <span>帧率</span>
+          <span>{t("config.stream.frameRate")}</span>
           <select
             value={values.fps}
             disabled={disabled}
@@ -183,7 +185,7 @@ function StreamEditor({
           </select>
         </label>
         <label className="config-field config-field--bitrate">
-          <span>码率</span>
+          <span>{t("config.stream.bitrate")}</span>
           <span className="number-input">
             <input
               type="number"
@@ -241,13 +243,20 @@ function DetectionRow({
   onToggle,
   onValue,
 }: DetectionRowProps) {
+  const { t } = useTranslation();
   return (
     <div className="feature-row">
       <div className="feature-row__identity">
         <span aria-hidden="true">{icon}</span>
         <div>
           <strong>{title}</strong>
-          <small>{supported ? (enabled ? "已启用" : "已关闭") : "设备不支持"}</small>
+          <small>
+            {supported
+              ? enabled
+                ? t("common.enabled")
+                : t("common.disabled")
+              : t("common.unsupported")}
+          </small>
         </div>
       </div>
       <label className="feature-row__range">
@@ -273,23 +282,15 @@ function DetectionRow({
   );
 }
 
-const busyStatusLabel = {
-  saving: "正在保存配置",
-  restart_pending: "配置已保存，设备正在重启",
-  reconnecting: "正在等待设备恢复连接",
-  verifying: "设备已恢复，正在确认配置",
-  resetting: "正在恢复默认配置",
-} as const;
-
 type ConfigSectionId = "video" | "detection";
 
 const CONFIG_SECTIONS: Array<{
   id: ConfigSectionId;
   index: string;
-  label: string;
+  labelKey: "config.sections.video" | "config.sections.detection";
 }> = [
-  { id: "video", index: "01", label: "视频码流" },
-  { id: "detection", index: "02", label: "智能检测" },
+  { id: "video", index: "01", labelKey: "config.sections.video" },
+  { id: "detection", index: "02", labelKey: "config.sections.detection" },
 ];
 
 export function DeviceConfiguration({
@@ -302,6 +303,7 @@ export function DeviceConfiguration({
   onApplicationLockChange,
   onDeviceRecovered,
 }: DeviceConfigurationProps) {
+  const { t, i18n } = useTranslation();
   const configuration = useDeviceConfiguration({
     apiBaseUrl: selectedDevice.apiBaseUrl,
     deviceId: device.device_id,
@@ -325,6 +327,50 @@ export function DeviceConfiguration({
       : configuration.applicationState
   ) as keyof typeof busyStatusLabel;
   const taskProgress = Math.min(100, Math.max(0, configuration.task?.progress ?? 0));
+  const busyStatusLabel = {
+    saving: t("config.saving"),
+    restart_pending: t("config.restartPending"),
+    reconnecting: t("config.reconnectingStatus"),
+    verifying: t("config.verifyingStatus"),
+    resetting: t("config.resetting"),
+  } as const;
+
+  const issueMessage = (issue: ConfigIssue) => {
+    if (issue.code === "UNSUPPORTED_PROFILE") {
+      return t("config.validation.unsupportedProfile");
+    }
+    if (issue.code === "INVALID_FPS") {
+      return t("config.validation.invalidFps");
+    }
+    if (issue.code === "UNSUPPORTED_FPS") {
+      return t("config.validation.unsupportedFps");
+    }
+    if (issue.code === "INVALID_BITRATE") {
+      return t("config.validation.invalidBitrate");
+    }
+    if (issue.code === "OUT_OF_RANGE") {
+      if (issue.field.endsWith(".threshold")) {
+        return t("config.validation.thresholdRange");
+      }
+      if (issue.field.endsWith(".sensitivity")) {
+        return t("config.validation.sensitivityRange");
+      }
+      if (issue.field.endsWith(".bitrate_kbps")) {
+        const streamKey = issue.field.startsWith("video.sub") ? "sub" : "main";
+        const profileId = configuration.draft?.video[streamKey].profile;
+        const profile = configuration.capabilities?.video[streamKey].profiles.find(
+          (entry) => entry.id === profileId,
+        );
+        if (profile) {
+          return t("config.validation.bitrateRange", {
+            min: profile.bitrate_min,
+            max: profile.bitrate_max,
+          });
+        }
+      }
+    }
+    return issue.message;
+  };
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -333,12 +379,20 @@ export function DeviceConfiguration({
     const updateActiveSection = () => {
       const editorTop = editor.getBoundingClientRect().top;
       let nextSection: ConfigSectionId = "video";
-      CONFIG_SECTIONS.forEach(({ id }) => {
-        const section = sectionRefs.current[id];
-        if (section && section.getBoundingClientRect().top <= editorTop + 150) {
-          nextSection = id;
-        }
-      });
+      const editorIsScrollable = editor.scrollHeight > editor.clientHeight + 1;
+      const editorIsAtBottom =
+        editorIsScrollable &&
+        editor.scrollTop + editor.clientHeight >= editor.scrollHeight - 2;
+      if (editorIsAtBottom) {
+        nextSection = CONFIG_SECTIONS[CONFIG_SECTIONS.length - 1].id;
+      } else {
+        CONFIG_SECTIONS.forEach(({ id }) => {
+          const section = sectionRefs.current[id];
+          if (section && section.getBoundingClientRect().top <= editorTop + 150) {
+            nextSection = id;
+          }
+        });
+      }
       setActiveSection(nextSection);
     };
 
@@ -379,7 +433,7 @@ export function DeviceConfiguration({
       {
         key: "person",
         icon: <Settings2 size={17} />,
-        title: "人员检测",
+        title: t("config.detection.person"),
         supported: capabilities.features.person_detection,
         enabled: draft.detection.person.enabled,
         value: draft.detection.person.threshold,
@@ -387,12 +441,13 @@ export function DeviceConfiguration({
         max: 1,
         step: 0.01,
         valueLabel: draft.detection.person.threshold.toFixed(2),
-        rangeLabel: "阈值",
+        rangeLabel: t("config.detection.threshold"),
+        toggleLabel: t("config.detection.enablePerson"),
       },
       {
         key: "face",
         icon: <ScanFace size={17} />,
-        title: "人脸检测",
+        title: t("config.detection.face"),
         supported: capabilities.features.face_detection,
         enabled: draft.detection.face.enabled,
         value: draft.detection.face.threshold,
@@ -400,12 +455,13 @@ export function DeviceConfiguration({
         max: 1,
         step: 0.01,
         valueLabel: draft.detection.face.threshold.toFixed(2),
-        rangeLabel: "阈值",
+        rangeLabel: t("config.detection.threshold"),
+        toggleLabel: t("config.detection.enableFace"),
       },
       {
         key: "motion",
         icon: <Activity size={17} />,
-        title: "移动检测",
+        title: t("config.detection.motion"),
         supported: capabilities.features.motion_detection,
         enabled: draft.detection.motion.enabled,
         value: draft.detection.motion.sensitivity,
@@ -413,10 +469,11 @@ export function DeviceConfiguration({
         max: 100,
         step: 1,
         valueLabel: `${draft.detection.motion.sensitivity}`,
-        rangeLabel: "灵敏度",
+        rangeLabel: t("config.detection.sensitivity"),
+        toggleLabel: t("config.detection.enableMotion"),
       },
     ] as const;
-  }, [configuration]);
+  }, [configuration, t]);
 
   const updateDetection = (
     key: "person" | "face" | "motion",
@@ -446,15 +503,15 @@ export function DeviceConfiguration({
               <LoaderCircle size={25} />
               <strong>
                 {configuration.applicationState === "reconnecting"
-                  ? "正在恢复设备连接"
+                  ? t("config.reconnecting")
                   : configuration.applicationState === "verifying"
-                    ? "正在确认配置应用结果"
-                    : "正在读取设备配置"}
+                    ? t("config.verifying")
+                    : t("config.loading")}
               </strong>
               <span>
                 {configuration.applicationState === "reconnecting"
-                  ? "只会重新连接相同 device_id 的设备"
-                  : "同时获取能力范围与当前值"}
+                  ? t("config.reconnectingDetail")
+                  : t("config.loadingDetail")}
               </span>
             </div>
           )}
@@ -462,14 +519,14 @@ export function DeviceConfiguration({
           {configuration.status === "error" && (
             <div className="configuration-loading" role="alert">
               <AlertTriangle size={24} />
-              <strong>配置读取失败</strong>
+              <strong>{t("config.readFailed")}</strong>
               <span>{configuration.requestError}</span>
               <button
                 className="button button--secondary"
                 type="button"
                 onClick={() => void configuration.load()}
               >
-                <RefreshCw size={15} />重试
+                <RefreshCw size={15} />{t("common.retry")}
               </button>
             </div>
           )}
@@ -484,15 +541,15 @@ export function DeviceConfiguration({
                     <div className="eyebrow">
                       CONFIGURATION · SCHEMA {configuration.capabilities.schema_version}
                     </div>
-                    <h3>设备配置</h3>
+                    <h3>{t("config.title")}</h3>
                     <span
                       className={`draft-state ${configuration.hasChanges ? "draft-state--dirty" : ""}`}
                     >
                       {configuration.applicationBusy
-                        ? "等待设备确认"
+                        ? t("config.waiting")
                         : configuration.hasChanges
-                          ? "有未保存修改"
-                          : "配置已同步"}
+                          ? t("config.unsaved")
+                          : t("config.synced")}
                     </span>
                   </div>
                   <div className="configuration-toolbar__actions">
@@ -502,7 +559,7 @@ export function DeviceConfiguration({
                       disabled={isBusy}
                       onClick={() => setConfirmReset(true)}
                     >
-                      <RotateCcw size={15} />恢复默认
+                      <RotateCcw size={15} />{t("config.restoreDefaults")}
                     </button>
                     <button
                       className="button button--primary config-save-button"
@@ -515,7 +572,7 @@ export function DeviceConfiguration({
                       ) : (
                         <Save size={16} />
                       )}
-                      保存并应用
+                      {t("config.saveApply")}
                     </button>
                   </div>
                 </div>
@@ -523,15 +580,15 @@ export function DeviceConfiguration({
                 {confirmReset && (
                   <div className="reset-confirmation" role="alert">
                     <div>
-                      <strong>恢复设备默认配置？</strong>
-                      <span>当前草稿和设备已保存配置将被替换。</span>
+                      <strong>{t("config.resetConfirmTitle")}</strong>
+                      <span>{t("config.resetConfirmDetail")}</span>
                     </div>
                     <button
                       className="button button--ghost"
                       type="button"
                       onClick={() => setConfirmReset(false)}
                     >
-                      取消
+                      {t("common.cancel")}
                     </button>
                     <button
                       className="button button--secondary"
@@ -541,7 +598,7 @@ export function DeviceConfiguration({
                         void configuration.restoreDefaults();
                       }}
                     >
-                      确认恢复
+                      {t("config.confirmReset")}
                     </button>
                   </div>
                 )}
@@ -553,9 +610,9 @@ export function DeviceConfiguration({
                       <strong>{busyStatusLabel[activeStatus]}</strong>
                       <span>
                         {configuration.applicationState === "restart_pending"
-                          ? "配置已保存，设备正在重启"
+                          ? t("config.restartPending")
                           : configuration.task?.message ??
-                            "网络中断不会立即判定失败"}
+                            t("config.networkTolerance")}
                       </span>
                       {configuration.task?.progress !== undefined && (
                         <output>{taskProgress}%</output>
@@ -586,15 +643,15 @@ export function DeviceConfiguration({
                       {configuration.outcome.type === "error" && (
                         <span>
                           {configuration.outcome.rolledBack
-                            ? "自动回滚成功，页面已重新读取设备配置。"
-                            : "设备未确认自动回滚，请检查当前配置。"}
+                            ? t("config.rollbackSuccess")
+                            : t("config.rollbackUnconfirmed")}
                         </span>
                       )}
                     </div>
                     <button
                       className="icon-button"
                       type="button"
-                      aria-label="关闭提示"
+                      aria-label={t("common.closeNotice")}
                       onClick={configuration.dismissOutcome}
                     >
                       <X size={14} />
@@ -620,15 +677,15 @@ export function DeviceConfiguration({
                       <div>
                         <strong>
                           {configuration.validation.valid
-                            ? "配置包含警告"
-                            : "配置校验未通过"}
+                            ? t("config.validationWarning")
+                            : t("config.validationFailed")}
                         </strong>
                         {[
                           ...configuration.validation.errors,
                           ...configuration.validation.warnings,
                         ].map((issue) => (
                           <span key={`${issue.field}-${issue.code}`}>
-                            {issue.message}
+                            {issueMessage(issue)}
                           </span>
                         ))}
                       </div>
@@ -647,12 +704,12 @@ export function DeviceConfiguration({
                       <Video size={18} />
                       <div>
                         <span>01</span>
-                        <h3 id="video-config-heading">视频码流</h3>
+                        <h3 id="video-config-heading">{t("config.sections.video")}</h3>
                       </div>
                     </div>
                     <div className="stream-grid">
                       <StreamEditor
-                        title="主码流"
+                        title={t("config.stream.main")}
                         streamKey="main"
                         values={configuration.draft.video.main}
                         profiles={configuration.capabilities.video.main.profiles}
@@ -662,10 +719,10 @@ export function DeviceConfiguration({
                       />
                       <div className="sub-stream-wrap">
                         <div className="sub-stream-switch">
-                          <span>子码流</span>
+                          <span>{t("config.stream.sub")}</span>
                           <Toggle
                             checked={configuration.draft.video.sub.enabled}
-                            label="启用子码流"
+                            label={t("config.stream.enableSub")}
                             onChange={(checked) =>
                               configuration.updateDraft((draft) => {
                                 draft.video.sub.enabled = checked;
@@ -674,7 +731,7 @@ export function DeviceConfiguration({
                           />
                         </div>
                         <StreamEditor
-                          title="子码流"
+                          title={t("config.stream.sub")}
                           streamKey="sub"
                           values={configuration.draft.video.sub}
                           profiles={configuration.capabilities.video.sub.profiles}
@@ -697,7 +754,7 @@ export function DeviceConfiguration({
                       <Settings2 size={18} />
                       <div>
                         <span>02</span>
-                        <h3 id="feature-config-heading">画面与智能检测</h3>
+                        <h3 id="feature-config-heading">{t("config.sections.detectionFull")}</h3>
                       </div>
                     </div>
                     <div className="feature-list">
@@ -707,20 +764,20 @@ export function DeviceConfiguration({
                             <Video size={17} />
                           </span>
                           <div>
-                            <strong>OSD 叠加</strong>
+                            <strong>{t("config.overlay.title")}</strong>
                             <small>
                               {configuration.capabilities.features.osd
                                 ? configuration.draft.overlay.enabled
-                                  ? "已启用"
-                                  : "已关闭"
-                                : "设备不支持"}
+                                  ? t("common.enabled")
+                                  : t("common.disabled")
+                                : t("common.unsupported")}
                             </small>
                           </div>
                         </div>
                         <Toggle
                           checked={configuration.draft.overlay.enabled}
                           disabled={!configuration.capabilities.features.osd}
-                          label="启用 OSD"
+                          label={t("config.overlay.enable")}
                           onChange={(checked) =>
                             configuration.updateDraft((draft) => {
                               draft.overlay.enabled = checked;
@@ -732,7 +789,6 @@ export function DeviceConfiguration({
                         <DetectionRow
                           key={key}
                           {...row}
-                          toggleLabel={`启用${row.title}`}
                           onToggle={(checked) =>
                             updateDetection(key, "enabled", checked)
                           }
@@ -750,14 +806,14 @@ export function DeviceConfiguration({
                   <span>
                     {configuration.targetRevision
                       ? `TARGET ${configuration.targetRevision}`
-                      : "所有配置请求发送至当前连接设备"}
+                      : t("config.allRequestsTarget")}
                   </span>
                 </footer>
               </main>
             )}
         </div>
 
-        <nav className="config-section-nav" aria-label="配置分类">
+        <nav className="config-section-nav" aria-label={t("config.sectionMenu")}>
           <div className="config-section-nav__header">
             <span>SECTION</span>
             <output>
@@ -776,7 +832,7 @@ export function DeviceConfiguration({
                 onClick={() => scrollToSection(section.id)}
               >
                 <span>{section.index}</span>
-                <strong>{section.label}</strong>
+                <strong>{t(section.labelKey)}</strong>
               </button>
             ))}
           </div>
@@ -789,15 +845,20 @@ export function DeviceConfiguration({
 
         <aside
           className={`device-dashboard ${applicationLocked || isBusy ? "device-dashboard--recovering" : ""}`}
-          aria-label="当前设备仪表盘"
+          aria-label={t("config.currentDashboard")}
         >
           <div className="device-dashboard__status">
             <span />
-            {applicationLocked || isBusy ? "设备重启中" : "设备在线"}
+            {applicationLocked || isBusy
+              ? t("config.deviceRestarting")
+              : t("config.deviceOnline")}
           </div>
           <div className="device-dashboard__visual">
             {productImage ? (
-              <img src={productImage} alt={`${device.name} 产品图`} />
+              <img
+                src={productImage}
+                alt={t("discovery.productImage", { name: device.name })}
+              />
             ) : (
               <ImageOff size={28} aria-hidden="true" />
             )}
@@ -805,35 +866,39 @@ export function DeviceConfiguration({
           <div className="device-dashboard__identity">
             <div className="eyebrow">
               <Wifi size={12} />
-              {applicationLocked || isBusy ? "TARGET DEVICE" : "CONNECTED DEVICE"}
+              {applicationLocked || isBusy
+                ? t("config.targetDevice")
+                : t("config.connectedDevice")}
             </div>
             <h2>{device.name}</h2>
             <p>{device.device_id}</p>
           </div>
           <dl className="device-dashboard__meta">
             <div>
-              <dt>设备型号</dt>
+              <dt>{t("config.device.model")}</dt>
               <dd>{device.model}</dd>
             </div>
             <div>
-              <dt>设备地址</dt>
+              <dt>{t("config.device.address")}</dt>
               <dd>{endpointLabel(selectedDevice.apiBaseUrl)}</dd>
             </div>
             <div>
-              <dt>固件版本</dt>
+              <dt>{t("config.device.firmware")}</dt>
               <dd>{device.firmware_version}</dd>
             </div>
             <div>
-              <dt>Manager</dt>
+              <dt>{t("config.device.manager")}</dt>
               <dd>{device.manager_version}</dd>
             </div>
             <div>
-              <dt>API</dt>
+              <dt>{t("config.device.api")}</dt>
               <dd>v{device.api_version}</dd>
             </div>
             <div>
-              <dt>连接时间</dt>
-              <dd>{formatConnectionTime(connectedAt)}</dd>
+              <dt>{t("config.device.connectedAt")}</dt>
+              <dd>
+                {formatConnectionTime(connectedAt, i18n.resolvedLanguage ?? "en")}
+              </dd>
             </div>
           </dl>
           <div className="device-dashboard__actions">
@@ -841,7 +906,7 @@ export function DeviceConfiguration({
               className="icon-button"
               type="button"
               onClick={onRescan}
-              title="重新搜索"
+              title={t("config.rescanTitle")}
               disabled={applicationLocked || isBusy}
             >
               <RefreshCw size={16} />
@@ -850,7 +915,7 @@ export function DeviceConfiguration({
               className="icon-button"
               type="button"
               onClick={onDisconnect}
-              title="断开连接"
+              title={t("config.disconnectTitle")}
               disabled={applicationLocked || isBusy}
             >
               <Unplug size={16} />

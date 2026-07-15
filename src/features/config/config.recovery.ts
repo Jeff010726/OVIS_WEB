@@ -1,5 +1,6 @@
 import { discoverDevices, fetchDeviceInfo } from "../device/device.api";
 import type { OvisDeviceInfo } from "../device/device.types";
+import i18n from "../../i18n";
 import type { PendingConfigApplication } from "./config.session";
 
 export const CONFIG_RECONNECT_TIMEOUT_MS = 90_000;
@@ -13,7 +14,7 @@ export interface RecoveredConfigDevice {
 
 export class ConfigReconnectTimeoutError extends Error {
   constructor() {
-    super("设备在 90 秒内未恢复连接");
+    super(i18n.t("config.validation.reconnectTimeout"));
     this.name = "ConfigReconnectTimeoutError";
   }
 }

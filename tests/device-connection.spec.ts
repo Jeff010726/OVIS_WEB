@@ -1,6 +1,29 @@
 import { expect, test } from "@playwright/test";
 import type { Page, Route } from "@playwright/test";
 
+const LANGUAGE_TEST_TITLE = "defaults to English and persists a Simplified Chinese selection";
+const RESPONSIVE_IDLE_TEST_TITLE = "keeps the 1080p idle composition proportional at 2K";
+const RESPONSIVE_CONFIG_TEST_TITLE =
+  "scales the configuration workspace and keeps the dashboard fixed at 2K";
+const ENGLISH_MOBILE_CONFIG_TEST_TITLE =
+  "keeps the English configuration workspace usable on mobile";
+
+test.beforeEach(async ({ page }, testInfo) => {
+  if (
+    [
+      LANGUAGE_TEST_TITLE,
+      RESPONSIVE_IDLE_TEST_TITLE,
+      RESPONSIVE_CONFIG_TEST_TITLE,
+      ENGLISH_MOBILE_CONFIG_TEST_TITLE,
+    ].includes(testInfo.title)
+  ) {
+    return;
+  }
+  await page.addInitScript(() => {
+    localStorage.setItem("ovis_manager_language", "zh-CN");
+  });
+});
+
 async function readCanvasSignal(page: Page) {
   return page.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
     const gl = canvas.getContext("webgl2");
@@ -144,7 +167,9 @@ async function discoverSingleDevice(
     return route.abort("connectionrefused");
   });
   await page.goto("./");
-  await page.getByRole("button", { name: "搜索设备" }).click();
+  await page
+    .getByRole("button", { name: /搜索设备|Discover devices/ })
+    .click();
   await expect(
     page.getByRole("radio", { name: /OVIS Camera OVIS-1842-00123456/ }),
   ).toBeVisible();
@@ -170,6 +195,71 @@ test("shows the initial discovery workspace", async ({ page }) => {
   await expect(page.getByText("等待搜索")).toBeVisible();
   await expect(page.getByText("参数配置")).toHaveCount(0);
   await page.screenshot({ path: "/tmp/ovis-idle-desktop.png", fullPage: true });
+});
+
+test(LANGUAGE_TEST_TITLE, async ({ page }) => {
+  await page.route("**/models/*.glb", (route) => route.abort("blockedbyclient"));
+  await page.goto("./");
+
+  await expect(page.getByRole("heading", { name: "Device Connection" })).toBeVisible();
+  await expect(page.getByText("Ready to discover")).toBeVisible();
+  const languageButton = page.getByRole("button", { name: "Language" });
+  await languageButton.click();
+  await page
+    .getByRole("menuitemradio", { name: "Simplified Chinese" })
+    .click();
+
+  await expect(page.getByRole("heading", { name: "设备连接" })).toBeVisible();
+  await expect(page.getByText("等待搜索")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "设备连接" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+});
+
+test(RESPONSIVE_IDLE_TEST_TITLE, async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("./");
+  await expect(
+    page.getByRole("img", {
+      name: "Interactive 3D view of the OVIS camera module",
+    }),
+  ).toHaveAttribute("data-model-status", "ready", { timeout: 25_000 });
+
+  const workspace = page.locator(".workspace-panel");
+  const heading = page.getByRole("heading", { name: "Device Connection" });
+  const workspace1080 = await workspace.boundingBox();
+  const headingSize1080 = await heading.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+  await page.screenshot({ path: "/tmp/ovis-idle-1080-en.png", fullPage: true });
+
+  await page.setViewportSize({ width: 2200, height: 1238 });
+  const workspaceIntermediate = await workspace.boundingBox();
+  const intermediateRatio = 2200 / 1920;
+  expect(
+    (workspaceIntermediate?.width ?? 0) / (workspace1080?.width ?? 1),
+  ).toBeCloseTo(intermediateRatio, 1);
+  expect(
+    (workspaceIntermediate?.height ?? 0) / (workspace1080?.height ?? 1),
+  ).toBeCloseTo(intermediateRatio, 1);
+
+  await page.setViewportSize({ width: 2560, height: 1440 });
+  const workspace2K = await workspace.boundingBox();
+  const headingSize2K = await heading.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize),
+  );
+
+  expect((workspace2K?.width ?? 0) / (workspace1080?.width ?? 1)).toBeCloseTo(
+    4 / 3,
+    1,
+  );
+  expect((workspace2K?.height ?? 0) / (workspace1080?.height ?? 1)).toBeCloseTo(
+    4 / 3,
+    1,
+  );
+  expect(headingSize2K / headingSize1080).toBeCloseTo(4 / 3, 1);
+  await page.screenshot({ path: "/tmp/ovis-idle-2k-en.png", fullPage: true });
 });
 
 test("renders and rotates the optimized product model", async ({ page }) => {
@@ -326,34 +416,43 @@ test("selects, confirms, connects, and disconnects locally", async ({ page }) =>
   await expect(page.getByText("搜索完成")).toBeVisible();
 });
 
-test("scales the configuration workspace and keeps the dashboard fixed at 2K", async ({
+test(RESPONSIVE_CONFIG_TEST_TITLE, async ({
   page,
 }) => {
   await page.setViewportSize({ width: 2560, height: 1440 });
   await mockConfigurationRead(page);
   await discoverSingleDevice(page);
   await page.getByRole("radio").click();
-  await page.getByRole("button", { name: "连接", exact: true }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   const workspace = page.locator(".workspace-panel--configuration");
+  const editor = page.locator(".configuration-editor");
   const dashboard = page.getByRole("complementary", {
-    name: "当前设备仪表盘",
+    name: "Connected device dashboard",
   });
-  const sectionMenu = page.getByRole("navigation", { name: "配置分类" });
+  const sectionMenu = page.getByRole("navigation", {
+    name: "Configuration sections",
+  });
 
   await expect(workspace).toBeVisible();
   await expect(dashboard).toBeVisible();
   await expect(sectionMenu).toBeVisible();
+  await expect(page.getByRole("button", { name: "01 Video Streams" })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
 
   const workspaceBounds = await workspace.boundingBox();
+  const editorBounds = await editor.boundingBox();
   const dashboardBounds = await dashboard.boundingBox();
   expect(workspaceBounds?.width).toBeGreaterThan(1700);
   expect(workspaceBounds?.height).toBeGreaterThan(900);
   expect(dashboardBounds?.width).toBeGreaterThanOrEqual(380);
 
   const menuBounds = await sectionMenu.boundingBox();
-  expect(menuBounds?.x).toBeGreaterThan((workspaceBounds?.x ?? 0) + 1000);
-  expect(dashboardBounds?.x).toBeGreaterThan(menuBounds?.x ?? 0);
+  expect(dashboardBounds?.x).toBeCloseTo((workspaceBounds?.x ?? 0) + 1, 0);
+  expect(menuBounds?.x).toBeGreaterThan(dashboardBounds?.x ?? 0);
+  expect(editorBounds?.x).toBeGreaterThan(menuBounds?.x ?? 0);
   expect(dashboardBounds?.height).toBeGreaterThan(
     (workspaceBounds?.height ?? 0) - 3,
   );
@@ -646,7 +745,7 @@ test("shows server validation errors without saving", async ({ page }) => {
   await page.getByRole("button", { name: "保存并应用" }).click();
 
   await expect(page.getByText("配置校验未通过")).toBeVisible();
-  await expect(page.getByText("主码流码率超出允许范围")).toBeVisible();
+  await expect(page.getByText("码率范围为 512-15000 Kbps")).toBeVisible();
   expect(saveRequests).toBe(0);
   await expect(page.getByText("有未保存修改")).toBeVisible();
 });
@@ -881,4 +980,29 @@ test("keeps the configuration workspace usable on mobile", async ({ page }) => {
   }));
   expect(dimensions.contentWidth).toBe(dimensions.viewportWidth);
   await page.screenshot({ path: "/tmp/ovis-config-mobile.png", fullPage: true });
+});
+
+test(ENGLISH_MOBILE_CONFIG_TEST_TITLE, async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockConfigurationRead(page);
+  await discoverSingleDevice(page);
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Device Configuration", level: 1 }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Main Stream" })).toBeVisible();
+  await expect(
+    page.getByRole("switch", { name: "Enable person detection" }),
+  ).toBeVisible();
+  const dimensions = await page.evaluate(() => ({
+    viewportWidth: document.documentElement.clientWidth,
+    contentWidth: document.documentElement.scrollWidth,
+  }));
+  expect(dimensions.contentWidth).toBe(dimensions.viewportWidth);
+  await page.screenshot({
+    path: "/tmp/ovis-config-mobile-en.png",
+    fullPage: true,
+  });
 });

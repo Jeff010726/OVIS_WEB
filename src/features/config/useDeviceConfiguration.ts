@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import i18n from "../../i18n";
 import type { OvisDeviceInfo } from "../device/device.types";
 import {
   ConfigRequestError,
@@ -41,7 +42,7 @@ const cloneValues = (values: DeviceConfigValues) => structuredClone(values);
 const formatError = (error: unknown) => {
   if (error instanceof ConfigRequestError) return error.message;
   if (error instanceof ConfigReconnectTimeoutError) return error.message;
-  return "配置操作失败";
+  return i18n.t("config.validation.operationFailed");
 };
 
 const delay = (milliseconds: number, signal: AbortSignal) =>
@@ -77,7 +78,7 @@ function validateDraftLocally(
       errors.push({
         field: `${field}.profile`,
         code: "UNSUPPORTED_PROFILE",
-        message: "请选择设备支持的分辨率预设",
+        message: i18n.t("config.validation.unsupportedProfile"),
       });
       return;
     }
@@ -85,20 +86,20 @@ function validateDraftLocally(
       errors.push({
         field: `${field}.fps`,
         code: "INVALID_FPS",
-        message: "帧率必须为正整数",
+        message: i18n.t("config.validation.invalidFps"),
       });
     } else if (profile && !profile.fps_options.includes(stream.fps)) {
       errors.push({
         field: `${field}.fps`,
         code: "UNSUPPORTED_FPS",
-        message: "当前预设不支持此帧率",
+        message: i18n.t("config.validation.unsupportedFps"),
       });
     }
     if (!Number.isInteger(stream.bitrate_kbps) || stream.bitrate_kbps <= 0) {
       errors.push({
         field: `${field}.bitrate_kbps`,
         code: "INVALID_BITRATE",
-        message: "码率必须为正整数",
+        message: i18n.t("config.validation.invalidBitrate"),
       });
     } else if (
       profile &&
@@ -108,7 +109,10 @@ function validateDraftLocally(
       errors.push({
         field: `${field}.bitrate_kbps`,
         code: "OUT_OF_RANGE",
-        message: `码率范围为 ${profile.bitrate_min}-${profile.bitrate_max} Kbps`,
+        message: i18n.t("config.validation.bitrateRange", {
+          min: profile.bitrate_min,
+          max: profile.bitrate_max,
+        }),
       });
     }
   };
@@ -127,7 +131,7 @@ function validateDraftLocally(
       errors.push({
         field,
         code: "OUT_OF_RANGE",
-        message: "阈值必须在 0 到 1 之间",
+        message: i18n.t("config.validation.thresholdRange"),
       });
     }
   });
@@ -139,7 +143,7 @@ function validateDraftLocally(
     errors.push({
       field: "detection.motion.sensitivity",
       code: "OUT_OF_RANGE",
-      message: "灵敏度必须在 0 到 100 之间",
+      message: i18n.t("config.validation.sensitivityRange"),
     });
   }
   return errors;
@@ -343,13 +347,16 @@ export function useDeviceConfiguration({
       }
       if (result.document.revision === pending.target_revision) {
         setApplicationState("success");
-        setOutcome({ type: "success", message: "配置应用成功" });
+        setOutcome({
+          type: "success",
+          message: i18n.t("config.validation.applySuccess"),
+        });
         return;
       }
       setApplicationState("failed");
       setOutcome({
         type: "error",
-        message: "配置未生效或已自动回滚",
+        message: i18n.t("config.validation.rolledBack"),
         rolledBack: result.task?.rolled_back,
       });
     },
@@ -472,7 +479,9 @@ export function useDeviceConfiguration({
       }
 
       const saved = await saveConfig(apiBaseUrl, payload, controller.signal);
-      if (!saved.saved) throw new ConfigRequestError("设备未保存配置");
+      if (!saved.saved) {
+        throw new ConfigRequestError(i18n.t("config.validation.notSaved"));
+      }
       setTargetRevision(saved.revision);
 
       const startedAt = Date.now();
@@ -527,7 +536,7 @@ export function useDeviceConfiguration({
           return nextTask;
         }
       }
-      throw new ConfigRequestError("恢复默认任务等待超时");
+      throw new ConfigRequestError(i18n.t("config.validation.resetTimeout"));
     },
     [apiBaseUrl],
   );
@@ -549,7 +558,11 @@ export function useDeviceConfiguration({
         assignDocument(document);
       } catch (error) {
         if (controller.signal.aborted) return;
-        setRequestError(`恢复后${formatError(error)}`);
+        setRequestError(
+          i18n.t("config.validation.afterReset", {
+            message: formatError(error),
+          }),
+        );
       }
       setStatus("ready");
       onApplicationLockChange(false);
@@ -561,7 +574,11 @@ export function useDeviceConfiguration({
         });
         return;
       }
-      setOutcome({ type: "success", message: completedTask.message || "已恢复默认配置" });
+      setOutcome({
+        type: "success",
+        message:
+          completedTask.message || i18n.t("config.validation.resetSuccess"),
+      });
     } catch (error) {
       if (controller.signal.aborted) return;
       onApplicationLockChange(false);
