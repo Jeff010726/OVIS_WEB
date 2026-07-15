@@ -164,6 +164,9 @@ test("scans with at most four requests and deduplicates device ids", async ({
   const productImages = page.locator(".device-result__visual img");
   await expect(productImages).toHaveCount(2);
   await expect(productImages.first()).toBeVisible();
+  await productImages
+    .first()
+    .evaluate((image: HTMLImageElement) => image.decode());
   const imageMetrics = await productImages.first().evaluate((image) => ({
     complete: (image as HTMLImageElement).complete,
     naturalWidth: (image as HTMLImageElement).naturalWidth,
