@@ -18,6 +18,7 @@ test("shows the initial connection workspace", async ({ page }) => {
   await expect(page.getByRole("button", { name: "连接设备" })).toBeVisible();
   await expect(page.getByText("等待连接")).toBeVisible();
   await expect(page.getByText("参数配置")).toHaveCount(0);
+  await page.screenshot({ path: "/tmp/ovis-idle-desktop.png", fullPage: true });
 });
 
 test("connects, displays device metadata, and disconnects locally", async ({

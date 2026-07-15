@@ -39,12 +39,6 @@ export function DeviceSummary({
   return (
     <div className="device-summary">
       <section className="device-identity" aria-labelledby="device-name">
-        <div className="device-identity__visual" aria-hidden="true">
-          <div className="device-identity__lens">
-            <span />
-          </div>
-          <div className="device-identity__scanline" />
-        </div>
         <div className="device-identity__copy">
           <div className="eyebrow">
             <Radio size={13} /> LIVE DEVICE
