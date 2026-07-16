@@ -7,9 +7,13 @@ import { useDeviceConnection } from "./features/device/useDeviceConnection";
 function App() {
   const { t } = useTranslation();
   const connection = useDeviceConnection();
+  const isConfigurationView =
+    connection.state === "connected" || connection.state === "recovering";
 
   return (
-    <div className="app-shell">
+    <div
+      className={`app-shell ${isConfigurationView ? "app-shell--configuration" : ""}`}
+    >
       <header className="app-header">
         <a className="brand" href="./" aria-label={t("app.home")}>
           <span className="brand__wordmark">OVIS</span>
@@ -26,16 +30,14 @@ function App() {
       </header>
 
       <main className="main-content">
-        <div className="page-heading">
-          <h1>
-            {connection.state === "connected" || connection.state === "recovering"
-              ? t("app.configurationTitle")
-              : t("app.connectionTitle")}
-          </h1>
-        </div>
+        {!isConfigurationView && (
+          <div className="page-heading">
+            <h1>{t("app.connectionTitle")}</h1>
+          </div>
+        )}
 
         <section
-          className={`workspace-panel ${connection.state === "connected" ? "workspace-panel--configuration" : ""}`}
+          className={`workspace-panel ${isConfigurationView ? "workspace-panel--configuration" : ""}`}
           aria-label={t("app.workspace")}
         >
           <DeviceConnector

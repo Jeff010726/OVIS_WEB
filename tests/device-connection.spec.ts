@@ -395,7 +395,8 @@ test("selects, confirms, connects, and disconnects locally", async ({ page }) =>
   await connectButton.click();
 
   await expect(page.getByText("设备在线").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "设备配置", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "设备配置", level: 1 })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "设备配置", level: 3 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "OVIS Camera" })).toBeVisible();
   await expect(page.getByAltText("OVIS Camera 产品图")).toBeVisible();
   await expect(page.getByText("OVIS-1842-00123456").first()).toBeVisible();
@@ -411,6 +412,11 @@ test("selects, confirms, connects, and disconnects locally", async ({ page }) =>
   await expect(
     page.getByRole("complementary", { name: "当前设备仪表盘" }),
   ).toBeVisible();
+  const pageHeight = await page.evaluate(() => ({
+    document: document.documentElement.scrollHeight,
+    viewport: document.documentElement.clientHeight,
+  }));
+  expect(pageHeight.document).toBe(pageHeight.viewport);
 
   const configurationEditor = page.locator(".configuration-editor");
   const videoSectionButton = page.getByRole("button", {
@@ -528,17 +534,29 @@ test(RESPONSIVE_CONFIG_TEST_TITLE, async ({
   const workspaceBounds = await workspace.boundingBox();
   const editorBounds = await editor.boundingBox();
   const dashboardBounds = await dashboard.boundingBox();
+  const viewport = page.viewportSize();
   expect(workspaceBounds?.width).toBeGreaterThan(1700);
-  expect(workspaceBounds?.height).toBeGreaterThan(900);
+  expect(workspaceBounds?.height).toBeGreaterThan(1300);
   expect(dashboardBounds?.width).toBeGreaterThanOrEqual(380);
+  expect(workspaceBounds?.x).toBeCloseTo(0, 0);
+  expect(workspaceBounds?.width).toBeCloseTo(viewport?.width ?? 0, 0);
 
   const menuBounds = await sectionMenu.boundingBox();
-  expect(dashboardBounds?.x).toBeCloseTo((workspaceBounds?.x ?? 0) + 1, 0);
+  expect(dashboardBounds?.x).toBeCloseTo(workspaceBounds?.x ?? 0, 0);
   expect(menuBounds?.x).toBeGreaterThan(dashboardBounds?.x ?? 0);
   expect(editorBounds?.x).toBeGreaterThan(menuBounds?.x ?? 0);
   expect(dashboardBounds?.height).toBeGreaterThan(
     (workspaceBounds?.height ?? 0) - 3,
   );
+  const overflow = await page.evaluate(() => ({
+    documentHeight: document.documentElement.scrollHeight,
+    viewportHeight: document.documentElement.clientHeight,
+    editorOverflowY: getComputedStyle(
+      document.querySelector(".configuration-editor")!,
+    ).overflowY,
+  }));
+  expect(overflow.documentHeight).toBe(overflow.viewportHeight);
+  expect(overflow.editorOverflowY).toBe("auto");
 
   await page.screenshot({ path: "/tmp/ovis-config-2k.png", fullPage: true });
 });
@@ -1062,7 +1080,8 @@ test("keeps the configuration workspace usable on mobile", async ({ page }) => {
   await page.getByRole("radio").click();
   await page.getByRole("button", { name: "连接", exact: true }).click();
 
-  await expect(page.getByRole("heading", { name: "设备配置", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "设备配置", level: 1 })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "设备配置", level: 3 })).toBeVisible();
   await expect(page.getByRole("region", { name: "主码流" })).toBeVisible();
   await expect(page.getByRole("switch", { name: "启用人员检测" })).toBeVisible();
   const dimensions = await page.evaluate(() => ({
@@ -1082,6 +1101,9 @@ test(ENGLISH_MOBILE_CONFIG_TEST_TITLE, async ({ page }) => {
 
   await expect(
     page.getByRole("heading", { name: "Device Configuration", level: 1 }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Configuration", level: 3 }),
   ).toBeVisible();
   await expect(page.getByRole("region", { name: "Main Stream" })).toBeVisible();
   await expect(
