@@ -27,6 +27,7 @@ npm run dev
 npm run build
 ```
 
-Vite 的默认部署基础路径为 `/ovis-manager-web/`。当前 GitHub 仓库名为
-`OVIS_WEB`，部署工作流会在构建时覆盖为 `/OVIS_WEB/`，以匹配实际的
-GitHub Pages 项目路径。
+Vite 和 GitHub Pages 部署均使用根路径 `/`，用于自定义域名
+`ovis.aimorelogy.com`。仓库通过 GitHub Actions 发布，因此自定义域名应在
+仓库的 `Settings > Pages > Custom domain` 中配置，而不是依赖仓库内的
+`CNAME` 文件。

@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 4,
   reporter: "list",
   use: {
-    baseURL: remoteBaseUrl ?? "http://127.0.0.1:4173/ovis-manager-web/",
+    baseURL: remoteBaseUrl ?? "http://127.0.0.1:4173/",
     trace: "retain-on-failure",
   },
   projects: [
@@ -21,8 +21,8 @@ export default defineConfig({
     ? undefined
     : {
       command:
-          "npm run dev -- --host 127.0.0.1 --port 4173",
-        url: "http://127.0.0.1:4173/ovis-manager-web/",
-        reuseExistingServer: true,
-      },
+        "npm run dev -- --host 127.0.0.1 --port 4173",
+      url: "http://127.0.0.1:4173/",
+      reuseExistingServer: true,
+    },
 });

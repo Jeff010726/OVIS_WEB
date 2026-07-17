@@ -484,7 +484,7 @@ test("shows the English local network permission instructions", async ({ page })
   );
 
   await page.goto("./");
-  await page.getByRole("button", { name: "Language" }).click();
+  await page.getByRole("button", { name: /Language|语言/ }).click();
   await page.getByRole("menuitemradio", { name: "English" }).click();
   await page.getByRole("button", { name: "Discover devices" }).click();
 

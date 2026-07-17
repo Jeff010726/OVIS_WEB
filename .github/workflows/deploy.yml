@@ -24,8 +24,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      # GitHub Pages uses the repository name as the project path.
-      - run: npm run build -- --base=/OVIS_WEB/
+      # The custom domain serves this application from the site root.
+      - run: npm run build -- --base=/
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
