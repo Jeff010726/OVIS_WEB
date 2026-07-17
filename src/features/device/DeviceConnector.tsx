@@ -36,6 +36,8 @@ interface DeviceConnectorProps {
   connectedAt: Date | null;
   applicationLocked: boolean;
   usbAvailable: boolean;
+  usbPreflightReady: boolean;
+  usbIssue: string | null;
   onScan: () => void;
   onCancelScan: () => void;
   onSelectDevice: (deviceId: string) => void;
@@ -120,6 +122,8 @@ export function DeviceConnector({
   connectedAt,
   applicationLocked,
   usbAvailable,
+  usbPreflightReady,
+  usbIssue,
   onScan,
   onCancelScan,
   onSelectDevice,
@@ -181,7 +185,7 @@ export function DeviceConnector({
           <ManualAddressForm onConnect={onManualConnect} />
           <div className="usb-policy-notice">
             <Usb size={15} />
-            <span>{usbAvailable ? t("usb.policyHint") : t("usb.unsupported")}</span>
+            <span>{usbIssue ?? (usbAvailable ? t("usb.searchHint") : t("usb.unsupported"))}</span>
           </div>
         </div>
       </div>
@@ -276,10 +280,10 @@ export function DeviceConnector({
           </p>
         </header>
 
-        {!hasUninitializedDevice && (
+        {(!hasUninitializedDevice || usbIssue) && (
           <div className="usb-policy-notice usb-policy-notice--results">
             <Usb size={15} />
-            <span>{usbAvailable ? t("usb.policyHint") : t("usb.unsupported")}</span>
+            <span>{usbIssue ?? (usbAvailable ? t("usb.searchHint") : t("usb.unsupported"))}</span>
           </div>
         )}
 
@@ -386,7 +390,12 @@ export function DeviceConnector({
         <div className="idle-copy">
           <h2>{t("discovery.idleTitle")}</h2>
           <p>{t("discovery.idleDescription")}</p>
-          <button className="button button--primary" type="button" onClick={onScan}>
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={usbAvailable && !usbPreflightReady}
+            onClick={onScan}
+          >
             <Search size={18} />
             {t("discovery.scan")}
             <ArrowRight className="button__arrow" size={17} />

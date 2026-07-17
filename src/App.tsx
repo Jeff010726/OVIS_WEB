@@ -51,6 +51,8 @@ function App() {
             connectedAt={connection.connectedAt}
             applicationLocked={connection.applicationLocked}
             usbAvailable={connection.usbAvailable}
+            usbPreflightReady={connection.usbPreflightReady}
+            usbIssue={connection.usbIssue}
             onScan={() => void connection.scan()}
             onCancelScan={connection.cancelScan}
             onSelectDevice={connection.selectDevice}

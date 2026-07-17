@@ -84,6 +84,8 @@ export interface UseDeviceConnection {
   connectedAt: Date | null;
   applicationLocked: boolean;
   usbAvailable: boolean;
+  usbPreflightReady: boolean;
+  usbIssue: string | null;
   discoveryReport: DiscoveryReport | null;
   scan(): Promise<void>;
   cancelScan(): void;

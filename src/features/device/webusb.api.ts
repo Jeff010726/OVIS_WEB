@@ -73,6 +73,15 @@ interface WebUsbDevice {
 
 interface WebUsbManager {
   getDevices(): Promise<WebUsbDevice[]>;
+  requestDevice(options: {
+    filters: Array<{
+      vendorId: number;
+      productId: number;
+      classCode: number;
+      subclassCode: number;
+      protocolCode: number;
+    }>;
+  }): Promise<WebUsbDevice>;
   addEventListener(type: "connect" | "disconnect", listener: EventListener): void;
   removeEventListener(type: "connect" | "disconnect", listener: EventListener): void;
 }
@@ -111,6 +120,11 @@ export interface OvisUsbDevice {
 export interface OvisUsbSubnetAssignment {
   deviceId: string;
   subnet: number;
+}
+
+export interface OvisUsbDiscoveryReport {
+  devices: OvisUsbDevice[];
+  errors: string[];
 }
 
 const usbManager = () => (navigator as NavigatorWithUsb).usb;
@@ -233,9 +247,9 @@ async function openOvisDevice(device: WebUsbDevice): Promise<OvisUsbDevice> {
   return session;
 }
 
-export async function getAuthorizedOvisUsbDevices(): Promise<OvisUsbDevice[]> {
+export async function discoverAuthorizedOvisUsbDevices(): Promise<OvisUsbDiscoveryReport> {
   const usb = usbManager();
-  if (!usb) return [];
+  if (!usb) return { devices: [], errors: [] };
   const devices = (await usb.getDevices()).filter(
     (device) =>
       device.vendorId === OVIS_VENDOR_ID && device.productId === OVIS_PRODUCT_ID,
@@ -251,8 +265,12 @@ export async function getAuthorizedOvisUsbDevices(): Promise<OvisUsbDevice[]> {
     }),
   );
   const sessions: OvisUsbDevice[] = [];
+  const errors: string[] = [];
   for (const result of results) {
-    if (result.status !== "fulfilled") continue;
+    if (result.status !== "fulfilled") {
+      errors.push(result.reason instanceof Error ? result.reason.message : String(result.reason));
+      continue;
+    }
     const session = result.value;
     if (
       session.info.subnet === -1 &&
@@ -264,7 +282,37 @@ export async function getAuthorizedOvisUsbDevices(): Promise<OvisUsbDevice[]> {
       await session.device.close().catch(() => undefined);
     }
   }
-  return sessions;
+  return { devices: sessions, errors };
+}
+
+export async function getAuthorizedOvisUsbDevices(): Promise<OvisUsbDevice[]> {
+  return (await discoverAuthorizedOvisUsbDevices()).devices;
+}
+
+export async function requestOvisUsbDevice(): Promise<OvisUsbDevice> {
+  const usb = usbManager();
+  if (!usb) throw new Error(i18n.t("usb.unsupported"));
+  const devicePromise = usb.requestDevice({
+    filters: [
+      {
+        vendorId: OVIS_VENDOR_ID,
+        productId: OVIS_PRODUCT_ID,
+        classCode: OVIS_INTERFACE_CLASS,
+        subclassCode: OVIS_INTERFACE_SUBCLASS,
+        protocolCode: OVIS_INTERFACE_PROTOCOL,
+      },
+    ],
+  });
+  const session = await openOvisDevice(await devicePromise);
+  if (
+    session.info.subnet !== -1 ||
+    session.info.pending_subnet !== -1 ||
+    session.info.ncm_active
+  ) {
+    await closeOvisUsbDevice(session).catch(() => undefined);
+    throw new Error(i18n.t("usb.notUninitialized"));
+  }
+  return session;
 }
 
 export async function refreshOvisUsbDeviceInfo(
@@ -504,6 +552,7 @@ async function initializeOvisUsbDeviceUnlocked(
     }
 
     onPhase?.("writing-subnet");
+    await sendCommand(session, REQUEST_QUIESCE_NCM);
     await sendCommand(session, REQUEST_SET_SUBNET, subnet);
     const pendingInfo = await refreshOvisUsbDeviceInfo(session);
     if (

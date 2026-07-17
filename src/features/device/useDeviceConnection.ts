@@ -13,9 +13,11 @@ import {
 } from "./device.api";
 import {
   closeOvisUsbDevice,
+  discoverAuthorizedOvisUsbDevices,
   getAuthorizedOvisUsbDevices,
   isWebUsbAvailable,
   onWebUsbDeviceChange,
+  requestOvisUsbDevice,
 } from "./webusb.api";
 import type {
   DeviceConnectionErrorCode,
@@ -105,6 +107,10 @@ export function useDeviceConnection(): UseDeviceConnection {
   );
   const [discoveryReport, setDiscoveryReport] =
     useState<DiscoveryReport | null>(null);
+  const [usbPreflightReady, setUsbPreflightReady] = useState(
+    !isWebUsbAvailable(),
+  );
+  const [usbIssue, setUsbIssue] = useState<string | null>(null);
   const applicationLockedRef = useRef(startupPending !== null);
   const operationGeneration = useRef(0);
   const scanController = useRef<AbortController | null>(null);
@@ -113,6 +119,7 @@ export function useDeviceConnection(): UseDeviceConnection {
   const lastSuccessfulAddress = useRef<string | null>(
     readLastSuccessfulAddress(),
   );
+  const manualUsbFallbackRef = useRef(false);
 
   const updateDevices = useCallback((nextDevices: DiscoveredOvisDevice[]) => {
     devicesRef.current = nextDevices;
@@ -167,6 +174,33 @@ export function useDeviceConnection(): UseDeviceConnection {
   );
 
   useEffect(() => {
+    if (!isWebUsbAvailable()) return;
+    let active = true;
+    void discoverAuthorizedOvisUsbDevices()
+      .then((report) => {
+        if (!active) {
+          void Promise.allSettled(report.devices.map(closeOvisUsbDevice));
+          return;
+        }
+        manualUsbFallbackRef.current = report.devices.length === 0;
+        setUsbIssue(report.errors.length > 0 ? report.errors.join(" · ") : null);
+        void Promise.allSettled(report.devices.map(closeOvisUsbDevice));
+      })
+      .catch((nextError) => {
+        if (active) {
+          setUsbIssue(nextError instanceof Error ? nextError.message : String(nextError));
+          manualUsbFallbackRef.current = true;
+        }
+      })
+      .finally(() => {
+        if (active) setUsbPreflightReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!startupPending) return;
     const controller = new AbortController();
     operationGeneration.current += 1;
@@ -211,22 +245,59 @@ export function useDeviceConnection(): UseDeviceConnection {
     setDevice(null);
     setConnectedAt(null);
     setError(null);
+    setUsbIssue(null);
     setDiscoveryReport(null);
-    let usbDiscovery: ReturnType<typeof getAuthorizedOvisUsbDevices> | null = null;
+
+    const usbDiscovery = discoverAuthorizedOvisUsbDevices().catch(
+      (discoveryFailure: unknown) => ({
+        devices: [],
+        errors: [
+          discoveryFailure instanceof Error
+            ? discoveryFailure.message
+            : String(discoveryFailure),
+        ],
+      }),
+    );
+    const requestedUsbDevice = manualUsbFallbackRef.current
+      ? requestOvisUsbDevice()
+          .then((session) => ({ session, error: null as string | null }))
+          .catch((requestError: unknown) => ({
+            session: null,
+            error:
+              requestError instanceof DOMException &&
+              requestError.name === "NotFoundError"
+                ? null
+                : requestError instanceof Error
+                  ? requestError.message
+                  : String(requestError),
+          }))
+      : Promise.resolve({ session: null, error: null as string | null });
+    const networkDiscovery = discoverDevices(
+      controller.signal,
+      lastSuccessfulAddress.current,
+    );
 
     try {
-      const networkDiscovery = discoverDevices(
-        controller.signal,
-        lastSuccessfulAddress.current,
-      );
-      usbDiscovery = getAuthorizedOvisUsbDevices().catch(() => []);
-      const [networkReport, usbSessions] = await Promise.all([
+      const [networkReport, usbReport, requested] = await Promise.all([
         networkDiscovery,
         usbDiscovery,
+        requestedUsbDevice,
       ]);
       if (operationGeneration.current !== generation) return;
 
       scanController.current = null;
+      if (requested.session) manualUsbFallbackRef.current = true;
+      const usbSessionsById = new Map(
+        usbReport.devices.map((session) => [session.info.device_id, session]),
+      );
+      if (requested.session) {
+        usbSessionsById.set(requested.session.info.device_id, requested.session);
+      }
+      const usbSessions = [...usbSessionsById.values()];
+      const usbIssues = [requested.error, ...usbReport.errors].filter(
+        (issue): issue is string => issue !== null,
+      );
+      setUsbIssue(usbIssues.length > 0 ? usbIssues.join(" · ") : null);
       const initialized = networkReport.devices.filter(
         (entry): entry is InitializedDevice =>
           entry.initialization === "initialized",
@@ -256,11 +327,13 @@ export function useDeviceConnection(): UseDeviceConnection {
         setState("results");
       }
     } catch {
-      if (usbDiscovery) {
-        void usbDiscovery.then((sessions) =>
-          Promise.allSettled(sessions.map(closeOvisUsbDevice)),
-        );
-      }
+      void Promise.all([usbDiscovery, requestedUsbDevice]).then(
+        ([usbReport, requested]) =>
+          Promise.allSettled([
+            ...usbReport.devices.map(closeOvisUsbDevice),
+            ...(requested.session ? [closeOvisUsbDevice(requested.session)] : []),
+          ]),
+      );
       if (
         operationGeneration.current !== generation ||
         controller.signal.aborted
@@ -556,6 +629,8 @@ export function useDeviceConnection(): UseDeviceConnection {
     connectedAt,
     applicationLocked,
     usbAvailable: isWebUsbAvailable(),
+    usbPreflightReady,
+    usbIssue,
     discoveryReport,
     scan,
     cancelScan,
