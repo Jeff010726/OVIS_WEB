@@ -21,10 +21,6 @@ export const DEVICE_API_BASE_URLS = DEVICE_HOSTS.map(
   (host) => `http://${host}:8080/api/v1`,
 );
 
-type LocalRequestInit = RequestInit & {
-  targetAddressSpace: "local";
-};
-
 interface FetchDeviceInfoOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -167,11 +163,10 @@ export async function fetchDeviceInfo(
   const abortFromParent = () => controller.abort();
   options.signal?.addEventListener("abort", abortFromParent, { once: true });
 
-  const requestOptions: LocalRequestInit = {
+  const requestOptions: RequestInit = {
     method: "GET",
     mode: "cors",
     cache: "no-store",
-    targetAddressSpace: "local",
     signal: controller.signal,
   };
 
