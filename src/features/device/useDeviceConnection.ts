@@ -258,10 +258,14 @@ export function useDeviceConnection(): UseDeviceConnection {
     } catch (requestError) {
       if (operationGeneration.current !== generation) return;
       setState("error");
-      setError(
+      const code =
         requestError instanceof DeviceConnectionError
           ? requestError.code
-          : "NETWORK_ERROR",
+          : "NETWORK_ERROR";
+      setError(
+        code === "PERMISSION_DENIED"
+          ? "LOCAL_NETWORK_PERMISSION_DENIED"
+          : code,
       );
     }
   }, [selectedDeviceId, updateDevices]);

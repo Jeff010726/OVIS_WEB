@@ -16,6 +16,9 @@ export function ErrorMessage({
   onRescan,
 }: ErrorMessageProps) {
   const { t } = useTranslation();
+  const showLocalNetworkHelp =
+    code === "PERMISSION_DENIED" ||
+    code === "LOCAL_NETWORK_PERMISSION_DENIED";
 
   return (
     <div className="error-message" role="alert">
@@ -25,6 +28,18 @@ export function ErrorMessage({
       <div className="error-message__content">
         <strong>{t(`errors.${code}.title`)}</strong>
         <p>{t(`errors.${code}.detail`)}</p>
+        {showLocalNetworkHelp && (
+          <div className="local-network-help">
+            <strong>{t("localNetworkHelp.title")}</strong>
+            <ol>
+              <li>{t("localNetworkHelp.stepOne")}</li>
+              <li>{t("localNetworkHelp.stepTwo")}</li>
+              <li>{t("localNetworkHelp.stepThree")}</li>
+              <li>{t("localNetworkHelp.stepFour")}</li>
+            </ol>
+            <p>{t("localNetworkHelp.fallback")}</p>
+          </div>
+        )}
       </div>
       <div className="error-message__actions">
         {onRescan && (

@@ -100,6 +100,14 @@ export const resources = {
           detail: "Two consecutive health checks failed. Browser-side monitoring has stopped.",
         },
       },
+      localNetworkHelp: {
+        title: "Allow local network access in Chrome",
+        stepOne: "Click the site information icon to the left of the address bar.",
+        stepTwo: "Select Site settings.",
+        stepThree: "Set Local network access to Allow.",
+        stepFour: "Return to this page and select Discover devices again.",
+        fallback: "If Local network access is not listed, reset this site's permissions, reload the page, then select Allow in Chrome's prompt.",
+      },
       discovery: {
         scanningTitle: "Discovering OVIS devices",
         scanningDescription: "Checking local network permission, then probing {{count}} device addresses",
@@ -305,6 +313,14 @@ export const resources = {
         UNSUPPORTED_API_VERSION: { title: "API 版本不兼容", detail: "当前网页仅支持设备 API v1，请更新设备或 Manager。" },
         DEVICE_CHANGED: { title: "设备身份已变化", detail: "所选地址对应的设备已更换，请重新搜索并确认设备。" },
         DEVICE_DISCONNECTED: { title: "设备连接已中断", detail: "连续两次状态检测失败，网页端已停止检测。" },
+      },
+      localNetworkHelp: {
+        title: "在 Chrome 中重新允许本地网络访问",
+        stepOne: "点击地址栏左侧的网站信息图标。",
+        stepTwo: "选择“网站设置”。",
+        stepThree: "将“本地网络访问”设为“允许”。",
+        stepFour: "返回此页面，再点击“搜索设备”。",
+        fallback: "如果没有“本地网络访问”选项，请重置此网站的权限、刷新页面，然后在 Chrome 弹窗中选择“允许”。",
       },
       discovery: {
         scanningTitle: "正在搜索 OVIS 设备",

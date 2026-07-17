@@ -807,10 +807,43 @@ a:focus-visible {
   font-weight: 600;
 }
 
+.error-message__content {
+  min-width: 0;
+}
+
 .error-message__content p {
   margin: 7px 0 0;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.6;
+}
+
+.local-network-help {
+  margin-top: 15px;
+  padding: 13px 14px;
+  border: 1px solid #3a322f;
+  background: #0d0c0b;
+}
+
+.local-network-help > strong {
+  display: block;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.local-network-help ol {
+  margin: 9px 0 0;
+  padding-left: 18px;
+  color: var(--muted-light);
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+.local-network-help p {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 10px;
   line-height: 1.6;
 }
 

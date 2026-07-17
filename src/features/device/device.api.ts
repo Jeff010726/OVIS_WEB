@@ -272,8 +272,7 @@ export async function discoverDevices(
   preferredApiBaseUrl?: string | null,
 ): Promise<DiscoveryReport> {
   const startedAt = performance.now();
-  let permissionState = await queryLocalNetworkPermission();
-  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+  let permissionState: LocalNetworkPermissionState = "unsupported";
 
   const createReport = (
     attempts: DiscoveryAttempt[],
@@ -300,15 +299,12 @@ export async function discoverDevices(
   if (!canRequestLocalNetwork()) {
     return createReport([], "browser-blocked");
   }
-  if (permissionState === "denied") {
-    return createReport([], "permission-denied");
-  }
 
   const apiBaseUrls = prioritizedApiBaseUrls(preferredApiBaseUrl);
   const attempts: DiscoveryAttempt[] = [];
 
-  // This first fetch is intentionally kept in the user-initiated scan call. In
-  // Chrome it is the request that triggers the native LNA permission prompt.
+  // Keep this request as the first async operation after the search button click
+  // so Chrome can associate its Local Network Access prompt with that gesture.
   const permissionProbe = await attemptDiscoveryAddress(apiBaseUrls[0], signal);
   attempts.push(permissionProbe);
 

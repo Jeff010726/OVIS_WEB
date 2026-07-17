@@ -443,7 +443,7 @@ test("scans with at most four requests and deduplicates device ids", async ({
   await page.screenshot({ path: "/tmp/ovis-results-desktop.png", fullPage: true });
 });
 
-test("reports an explicitly denied local network permission without scanning", async ({
+test("stops after the permission probe when local network access is denied", async ({
   page,
 }) => {
   let deviceRequests = 0;
@@ -463,7 +463,37 @@ test("reports an explicitly denied local network permission without scanning", a
 
   await expect(page.getByText("已拒绝本地网络访问")).toBeVisible();
   await expect(page.getByText("浏览器阻止了本地网络访问")).toHaveCount(0);
-  expect(deviceRequests).toBe(0);
+  await expect(
+    page.getByText("在 Chrome 中重新允许本地网络访问"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("将“本地网络访问”设为“允许”。"),
+  ).toBeVisible();
+  expect(deviceRequests).toBe(1);
+});
+
+test("shows the English local network permission instructions", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "permissions", {
+      configurable: true,
+      value: { query: async () => ({ state: "denied" }) },
+    });
+  });
+  await page.route("**/api/v1/device/info", (route) =>
+    route.abort("blockedbyclient"),
+  );
+
+  await page.goto("./");
+  await page.getByRole("button", { name: "Language" }).click();
+  await page.getByRole("menuitemradio", { name: "English" }).click();
+  await page.getByRole("button", { name: "Discover devices" }).click();
+
+  await expect(
+    page.getByText("Allow local network access in Chrome"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Set Local network access to Allow."),
+  ).toBeVisible();
 });
 
 test("reports browser blocking when every scan request fails immediately", async ({
