@@ -33,6 +33,10 @@ interface WebUsbInResult {
   data?: DataView;
 }
 
+interface WebUsbOutResult {
+  status: "ok" | "stall" | "babble";
+}
+
 interface WebUsbDevice {
   vendorId: number;
   productId: number;
@@ -63,7 +67,7 @@ interface WebUsbDevice {
       index: number;
     },
     data: Uint8Array,
-  ): Promise<unknown>;
+  ): Promise<WebUsbOutResult>;
 }
 
 interface WebUsbManager {
@@ -276,11 +280,15 @@ function validateAssignments(
   }
 }
 
-const sendCommand = (session: OvisUsbDevice, request: number, value = 0) =>
-  session.device.controlTransferOut(
+const sendCommand = async (session: OvisUsbDevice, request: number, value = 0) => {
+  const result = await session.device.controlTransferOut(
     transferSetup(session, request),
     new Uint8Array([value]),
   );
+  if (result.status !== "ok") {
+    throw new Error(i18n.t("usb.verificationFailed"));
+  }
+};
 
 async function configureOvisUsbSubnetsUnlocked(
   devices: OvisUsbDevice[],
@@ -316,10 +324,17 @@ async function configureOvisUsbSubnetsUnlocked(
     throw error;
   }
 
-  assignments.forEach(({ deviceId, subnet }) => rememberSubnet(deviceId, subnet));
   await Promise.all(
     targetSessions.map((device) => sendCommand(device, REQUEST_COMMIT)),
   );
+  const committed = await Promise.all(targetSessions.map(readInfo));
+  assignments.forEach(({ deviceId, subnet }) => {
+    const info = committed.find((entry) => entry.device_id === deviceId);
+    if (!info || info.subnet !== subnet || info.pending_subnet !== -1) {
+      throw new Error(i18n.t("usb.verificationFailed"));
+    }
+    rememberSubnet(deviceId, subnet);
+  });
   return assignments;
 }
 
