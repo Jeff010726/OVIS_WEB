@@ -12,8 +12,35 @@ npm run dev
 “搜索设备”会同时扫描 `192.168.0.1` 至 `192.168.255.1` 的 Manager API，并通过
 `navigator.usb.getDevices()` 读取已经授权的未初始化设备。两类设备按
 `device_id` 合并显示；同一设备同时由网络和 WebUSB 发现时，以已初始化的网络设备
-为准。浏览器无法静默发现从未授权的 USB 设备，因此页面另有需要用户点击触发的
-“授权 USB 设备”操作。
+为准。网页只使用 `navigator.usb.getDevices()`，不会调用 `requestDevice()` 或显示
+USB 设备选择器。
+
+未初始化设备必须预先通过 Chrome 或 Edge 企业策略授权。策略名为
+`WebUsbAllowDevicesForUrls`，值为：
+
+```json
+[
+  {
+    "devices": [{ "vendor_id": 13126, "product_id": 4110 }],
+    "urls": ["https://ovis.aimorelogy.com"]
+  }
+]
+```
+
+Windows 使用 `REG_SZ`：
+
+- Chrome: `HKLM\SOFTWARE\Policies\Google\Chrome\WebUsbAllowDevicesForUrls`
+- Edge: `HKLM\SOFTWARE\Policies\Microsoft\Edge\WebUsbAllowDevicesForUrls`
+
+macOS 使用 Managed Preferences：Chrome 域为 `com.google.Chrome`，Edge 域为
+`com.microsoft.Edge`，键名均为 `WebUsbAllowDevicesForUrls`。配置需要通过
+`.mobileconfig`、MDM 或 Managed Preferences 安装一次。Safari 不受支持。
+
+策略参考：[Chrome Enterprise Policy](https://chromeenterprise.google/policies/#WebUsbAllowDevicesForUrls)、
+[Microsoft Edge Policy](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-policies/webusballowdevicesforurls)。
+
+网页无法区分“没有插入设备”和“策略未安装”，因为两种情况下 `getDevices()` 都可能
+返回空数组；因此扫描结果只提供统一的策略环境提示，不回退到设备选择器。
 
 未初始化设备进入独立初始化页面，用户填写 `192.168.X.1` 中的 `X`。网页先根据
 已验证的网络设备检查网段占用，再单独探测目标地址，并通过 `navigator.locks`
@@ -23,9 +50,8 @@ npm run dev
 未配置设备使用 `PID 0x100E` 的独立 WebUSB 配置模式；保存后立即重新枚举为
 `PID 0x100D` 的 `NCM + UVC` 运行设备。设备后续启动会直接恢复已保存地址，不再
 加载 WebUSB 配置接口，也不再要求重复配置。网页在提交成功后把地址写入
-`localStorage`，后续搜索会优先探测历史成功地址和上次连接地址。首次使用时，用户需要通过
-Chrome 或 Edge 的 USB 选择器逐台授权；已授权设备可由
-`navigator.usb.getDevices()` 重新获取。
+`localStorage`，后续搜索会优先探测历史成功地址和上次连接地址。策略授权设备可由
+`navigator.usb.getDevices()` 静默获取。
 
 连接设备后，网页从选中设备的 `apiBaseUrl` 读取配置能力和当前配置，支持
 视频码流、OSD 与智能检测参数的校验、保存、应用、任务轮询和恢复默认。

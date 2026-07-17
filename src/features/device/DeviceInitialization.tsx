@@ -15,6 +15,7 @@ interface DeviceInitializationProps {
   device: UninitializedDevice;
   initializedDevices: InitializedDevice[];
   onCancel: () => void;
+  onDisconnected: (deviceId: string) => void;
   onInitialized: (apiBaseUrl: string, info: OvisDeviceInfo) => void;
 }
 
@@ -36,6 +37,7 @@ export function DeviceInitialization({
   device,
   initializedDevices,
   onCancel,
+  onDisconnected,
   onInitialized,
 }: DeviceInitializationProps) {
   const { t } = useTranslation();
@@ -43,6 +45,7 @@ export function DeviceInitialization({
   const [phase, setPhase] = useState<OvisUsbInitializationPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
+  const commitSucceededRef = useRef(false);
   const busy = phase !== null && phase !== "complete";
   const occupiedSubnets = useMemo(
     () =>
@@ -56,11 +59,13 @@ export function DeviceInitialization({
 
   useEffect(() => {
     return onOvisUsbDeviceDisconnected(device.usbSession, () => {
+      if (commitSucceededRef.current) return;
       controllerRef.current?.abort();
       setPhase(null);
       setError(t("usb.errors.DEVICE_DISCONNECTED"));
+      onDisconnected(device.deviceId);
     });
-  }, [device.usbSession, t]);
+  }, [device.deviceId, device.usbSession, onDisconnected, t]);
 
   useEffect(
     () => () => {
@@ -85,13 +90,17 @@ export function DeviceInitialization({
 
     const controller = new AbortController();
     controllerRef.current = controller;
+    commitSucceededRef.current = false;
     setError(null);
     setPhase("checking-address");
     try {
       const initialized = await initializeOvisUsbDevice(device.usbSession, subnet, {
         occupiedSubnets,
         signal: controller.signal,
-        onPhase: setPhase,
+        onPhase: (nextPhase) => {
+          if (nextPhase === "committed") commitSucceededRef.current = true;
+          setPhase(nextPhase);
+        },
         probeNetworkDevice: async (apiBaseUrl, timeoutMs, signal) => {
           try {
             return await fetchDeviceInfo(apiBaseUrl, { timeoutMs, signal });

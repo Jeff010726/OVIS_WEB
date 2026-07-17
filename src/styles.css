@@ -377,21 +377,6 @@ a:focus-visible {
   margin-inline: 0;
 }
 
-.idle-copy > .usb-authorize-button {
-  min-width: 174px;
-  min-height: 48px;
-  margin: 10px 0 0;
-}
-
-.usb-authorization-error {
-  display: block;
-  max-width: 420px;
-  margin-top: 9px;
-  color: var(--danger);
-  font-size: 10px;
-  line-height: 1.5;
-}
-
 .usb-provisioning {
   width: 100%;
   margin-top: 24px;
@@ -940,8 +925,26 @@ a:focus-visible {
   gap: 8px;
 }
 
-.connector-error-stack > .usb-authorize-button {
-  margin-top: 12px;
+.usb-policy-notice {
+  width: min(100%, 650px);
+  margin-top: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted-light);
+  border: 1px solid var(--line-soft);
+  background: #0d0d0d;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.usb-policy-notice--results {
+  width: auto;
+  max-width: none;
+  margin: 0;
+  padding: 10px clamp(26px, 4vw, 46px);
+  border-width: 0 0 1px;
 }
 
 .device-initialization {
@@ -2723,10 +2726,6 @@ a:focus-visible {
 
   .idle-copy > p,
   .idle-copy .button--primary {
-    margin-inline: auto;
-  }
-
-  .idle-copy > .usb-authorize-button {
     margin-inline: auto;
   }
 

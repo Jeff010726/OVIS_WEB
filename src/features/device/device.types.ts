@@ -84,12 +84,9 @@ export interface UseDeviceConnection {
   connectedAt: Date | null;
   applicationLocked: boolean;
   usbAvailable: boolean;
-  usbAuthorizing: boolean;
-  usbError: string | null;
   discoveryReport: DiscoveryReport | null;
   scan(): Promise<void>;
   cancelScan(): void;
-  authorizeUsbDevice(): Promise<void>;
   selectDevice(deviceId: string): void;
   connect(): Promise<void>;
   connectManualAddress(ipAddress: string): Promise<void>;
@@ -97,6 +94,7 @@ export interface UseDeviceConnection {
   rescan(): Promise<void>;
   retry(): Promise<void>;
   cancelInitialization(): void;
+  removeUninitializedDevice(deviceId: string): void;
   setApplicationLocked(locked: boolean): void;
   adoptRecoveredDevice(apiBaseUrl: string, info: OvisDeviceInfo): void;
 }

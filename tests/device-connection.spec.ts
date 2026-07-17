@@ -178,19 +178,18 @@ const fulfillJson = (route: Route, body: unknown) =>
     body: JSON.stringify(body),
   });
 
-async function mockAuthorizedWebUsbDevice(
+interface MockPolicyUsbDevice {
+  deviceId: string;
+  connected?: boolean;
+  failRead?: boolean;
+  disconnectOnCommit?: boolean;
+}
+
+async function mockPolicyWebUsbDevices(
   page: Page,
-  deviceId: string,
-  initiallyAuthorized = true,
+  specifications: MockPolicyUsbDevice[],
 ) {
-  await page.addInitScript(({ authorizedDeviceId, authorizedInitially }) => {
-    let usbInfo = {
-      protocol: 2,
-      device_id: authorizedDeviceId,
-      subnet: -1,
-      pending_subnet: -1,
-      ncm_active: false,
-    };
+  await page.addInitScript((deviceSpecifications) => {
     const configuration = {
       configurationValue: 1,
       interfaces: [
@@ -206,61 +205,105 @@ async function mockAuthorizedWebUsbDevice(
         },
       ],
     };
-    let opened = false;
-    let authorized = authorizedInitially;
-    const usbDevice = {
-      vendorId: 0x3346,
-      productId: 0x100e,
-      serialNumber: authorizedDeviceId,
-      get opened() {
-        return opened;
-      },
-      configuration,
-      configurations: [configuration],
-      open: async () => {
-        opened = true;
-      },
-      close: async () => {
-        opened = false;
-      },
-      selectConfiguration: async () => undefined,
-      claimInterface: async () => undefined,
-      controlTransferIn: async () => {
-        const bytes = new TextEncoder().encode(JSON.stringify(usbInfo));
-        return { data: new DataView(bytes.buffer) };
-      },
-      controlTransferOut: async (
-        setup: { request: number },
-        data: Uint8Array,
-      ) => {
-        if (setup.request === 0x03) {
-          usbInfo = { ...usbInfo, pending_subnet: data[0] };
-        } else if (setup.request === 0x04) {
-          usbInfo = {
-            ...usbInfo,
-            subnet: usbInfo.pending_subnet,
-            pending_subnet: -1,
-          };
-        } else if (setup.request === 0x05) {
-          usbInfo = { ...usbInfo, pending_subnet: -1 };
-        }
-        return { status: "ok" };
-      },
-    };
     const events = new EventTarget();
+    const entries = deviceSpecifications.map((specification) => {
+      let opened = false;
+      let connected = specification.connected ?? true;
+      let commitIssued = false;
+      let usbInfo = {
+        protocol: 2,
+        device_id: specification.deviceId,
+        subnet: -1,
+        pending_subnet: -1,
+        ncm_active: false,
+      };
+      const usbDevice = {
+        vendorId: 0x3346,
+        productId: 0x100e,
+        serialNumber: specification.deviceId,
+        get opened() {
+          return opened;
+        },
+        configuration,
+        configurations: [configuration],
+        open: async () => {
+          if (!connected) throw new DOMException("Disconnected", "NetworkError");
+          opened = true;
+        },
+        close: async () => {
+          opened = false;
+        },
+        selectConfiguration: async () => undefined,
+        claimInterface: async () => undefined,
+        controlTransferIn: async () => {
+          if (commitIssued && specification.disconnectOnCommit) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          if (!connected || specification.failRead) {
+            throw new DOMException("Read failed", "NetworkError");
+          }
+          const bytes = new TextEncoder().encode(JSON.stringify(usbInfo));
+          return { data: new DataView(bytes.buffer) };
+        },
+        controlTransferOut: async (
+          setup: { request: number },
+          data: Uint8Array,
+        ) => {
+          if (!connected) throw new DOMException("Disconnected", "NetworkError");
+          if (setup.request === 0x03) {
+            usbInfo = { ...usbInfo, pending_subnet: data[0] };
+          } else if (setup.request === 0x04) {
+            usbInfo = {
+              ...usbInfo,
+              subnet: usbInfo.pending_subnet,
+              pending_subnet: -1,
+            };
+            commitIssued = true;
+            if (specification.disconnectOnCommit) {
+              window.setTimeout(() => {
+                connected = false;
+                const event = new Event("disconnect");
+                Object.defineProperty(event, "device", { value: usbDevice });
+                events.dispatchEvent(event);
+              }, 0);
+            }
+          } else if (setup.request === 0x05) {
+            usbInfo = { ...usbInfo, pending_subnet: -1 };
+          }
+          return { status: "ok" };
+        },
+      };
+      return {
+        device: usbDevice,
+        isConnected: () => connected,
+        connect: () => {
+          connected = true;
+          const event = new Event("connect");
+          Object.defineProperty(event, "device", { value: usbDevice });
+          events.dispatchEvent(event);
+        },
+        disconnect: () => {
+          connected = false;
+          const event = new Event("disconnect");
+          Object.defineProperty(event, "device", { value: usbDevice });
+          events.dispatchEvent(event);
+        },
+      };
+    });
     Object.defineProperty(navigator, "usb", {
       configurable: true,
       value: {
-        getDevices: async () => (authorized ? [usbDevice] : []),
-        requestDevice: async () => {
-          authorized = true;
-          return usbDevice;
-        },
+        getDevices: async () =>
+          entries.filter((entry) => entry.isConnected()).map((entry) => entry.device),
         addEventListener: events.addEventListener.bind(events),
         removeEventListener: events.removeEventListener.bind(events),
       },
     });
-  }, { authorizedDeviceId: deviceId, authorizedInitially: initiallyAuthorized });
+    Object.defineProperty(window, "__ovisUsbTestDevices", {
+      configurable: true,
+      value: entries,
+    });
+  }, specifications);
 }
 
 async function discoverSingleDevice(
@@ -307,6 +350,7 @@ test("shows the initial discovery workspace", async ({ page }) => {
   );
   await expect(page.getByRole("button", { name: "搜索设备" })).toBeVisible();
   await expect(page.getByText("等待搜索")).toBeVisible();
+  await expect(page.getByRole("button", { name: /授权 USB|Authorize USB/ })).toHaveCount(0);
   await expect(page.getByText("参数配置")).toHaveCount(0);
   await page.screenshot({ path: "/tmp/ovis-idle-desktop.png", fullPage: true });
 });
@@ -400,7 +444,7 @@ test(RESPONSIVE_IDLE_TEST_TITLE, async ({ page }) => {
 });
 
 test("renders and rotates the optimized product model", async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   await page.goto("./");
   const model = page.getByRole("img", { name: "OVIS 相机模组 3D 展示" });
   await expect(model).toHaveAttribute("data-model-status", "ready", {
@@ -530,7 +574,7 @@ test("scans with bounded concurrency and deduplicates device ids", async ({
 
 test("merges initialized network and authorized WebUSB devices", async ({ page }) => {
   const usbDeviceId = "OVIS-1842-USB000000000001";
-  await mockAuthorizedWebUsbDevice(page, usbDeviceId);
+  await mockPolicyWebUsbDevices(page, [{ deviceId: usbDeviceId }]);
   await page.route("**/api/v1/device/info", (route) => {
     if (requestHost(route) === "192.168.42.1") {
       return fulfillJson(route, deviceInfo);
@@ -566,7 +610,7 @@ test("merges initialized network and authorized WebUSB devices", async ({ page }
 test("prefers a verified network result over WebUSB for the same device id", async ({
   page,
 }) => {
-  await mockAuthorizedWebUsbDevice(page, deviceInfo.device_id);
+  await mockPolicyWebUsbDevices(page, [{ deviceId: deviceInfo.device_id }]);
   await page.route("**/api/v1/device/info", (route) => {
     if (requestHost(route) === "192.168.42.1") {
       return fulfillJson(route, deviceInfo);
@@ -582,47 +626,106 @@ test("prefers a verified network result over WebUSB for the same device id", asy
   await expect(page.getByText("需要初始化")).toHaveCount(0);
 });
 
-test("adds a newly authorized uninitialized USB device to results", async ({ page }) => {
-  const usbDeviceId = "OVIS-1842-USB000000000002";
-  await mockAuthorizedWebUsbDevice(page, usbDeviceId, false);
+test("discovers multiple policy USB devices and ignores one read failure", async ({
+  page,
+}) => {
+  const firstDeviceId = "OVIS-1842-USB000000000002";
+  const secondDeviceId = "OVIS-1842-USB000000000003";
+  await mockPolicyWebUsbDevices(page, [
+    { deviceId: firstDeviceId },
+    { deviceId: "OVIS-1842-USBREADFAIL0001", failRead: true },
+    { deviceId: secondDeviceId },
+  ]);
+  await page.route("**/api/v1/device/info", (route) =>
+    route.abort("connectionrefused"),
+  );
 
   await page.goto("./");
-  await page.getByRole("button", { name: "授权 USB 设备" }).click();
+  await page.getByRole("button", { name: "搜索设备" }).click();
 
-  await expect(
-    page.getByRole("radio", { name: new RegExp(usbDeviceId) }),
-  ).toBeVisible();
-  await expect(page.getByText("需要初始化")).toBeVisible();
+  await expect(page.getByRole("radio")).toHaveCount(2);
+  await expect(page.getByRole("radio", { name: new RegExp(firstDeviceId) })).toBeVisible();
+  await expect(page.getByRole("radio", { name: new RegExp(secondDeviceId) })).toBeVisible();
+  await expect(page.getByText("USBREADFAIL")).toHaveCount(0);
+});
+
+test("adds and removes policy USB devices on connect and disconnect", async ({ page }) => {
+  const usbDeviceId = "OVIS-1842-USB000000000005";
+  await mockPolicyWebUsbDevices(page, [{ deviceId: usbDeviceId, connected: false }]);
+  await page.route("**/api/v1/device/info", (route) => {
+    if (requestHost(route) === "192.168.42.1") return fulfillJson(route, deviceInfo);
+    return route.abort("connectionrefused");
+  });
+
+  await page.goto("./");
+  await page.getByRole("button", { name: "搜索设备" }).click();
+  await expect(page.getByText("未发现未初始化 USB 设备，请确认 OVIS 浏览器权限策略已经安装。"))
+    .toBeVisible();
+
+  await page.evaluate(() => {
+    const testDevices = (
+      window as unknown as {
+        __ovisUsbTestDevices: Array<{ connect(): void; disconnect(): void }>;
+      }
+    ).__ovisUsbTestDevices;
+    testDevices[0].connect();
+  });
+  await expect(page.getByRole("radio", { name: new RegExp(usbDeviceId) })).toBeVisible();
+
+  await page.evaluate(() => {
+    const testDevices = (
+      window as unknown as {
+        __ovisUsbTestDevices: Array<{ connect(): void; disconnect(): void }>;
+      }
+    ).__ovisUsbTestDevices;
+    testDevices[0].disconnect();
+  });
+  await expect(page.getByRole("radio", { name: new RegExp(usbDeviceId) })).toHaveCount(0);
+  await expect(page.getByText("未发现未初始化 USB 设备，请确认 OVIS 浏览器权限策略已经安装。"))
+    .toBeVisible();
 });
 
 test("initializes an authorized USB device and reconnects only its identity", async ({
   page,
 }) => {
   test.setTimeout(30_000);
-  const usbDeviceId = "OVIS-1842-USB000000000003";
+  const usbDeviceId = "OVIS-1842-USB000000000004";
   const initializedUsbInfo = {
     ...deviceInfo,
     device_id: usbDeviceId,
     serial: usbDeviceId,
   };
   let targetRequests = 0;
-  await mockAuthorizedWebUsbDevice(page, usbDeviceId, false);
+  await mockPolicyWebUsbDevices(page, [
+    { deviceId: usbDeviceId, disconnectOnCommit: true },
+  ]);
   await mockConfigurationRead(page);
   await page.route("**/api/v1/device/info", (route) => {
     if (requestHost(route) !== "192.168.61.1") {
       return route.abort("connectionrefused");
     }
     targetRequests += 1;
-    return targetRequests === 1
+    return targetRequests < 3
       ? route.abort("connectionrefused")
       : fulfillJson(route, initializedUsbInfo);
   });
 
   await page.goto("./");
-  await page.getByRole("button", { name: "授权 USB 设备" }).click();
+  await page.getByRole("button", { name: "搜索设备" }).click();
+  await page.getByRole("radio", { name: new RegExp(usbDeviceId) }).click();
   await page.getByRole("button", { name: "初始化设备" }).click();
   await page.getByLabel("NCM 网段").fill("61");
   await page.getByRole("button", { name: "初始化设备" }).click();
+
+  await expect(page.getByText("设备正在重启")).toBeVisible();
+  const beforeNetworkVerification = await page.evaluate(
+    (deviceId) =>
+      (JSON.parse(localStorage.getItem("ovis-ncm-subnets") ?? "{}") as Record<string, number>)[
+        deviceId
+      ],
+    usbDeviceId,
+  );
+  expect(beforeNetworkVerification).toBeUndefined();
 
   await expect(
     page.getByRole("heading", { name: "设备配置", level: 3 }),

@@ -73,9 +73,6 @@ interface WebUsbDevice {
 
 interface WebUsbManager {
   getDevices(): Promise<WebUsbDevice[]>;
-  requestDevice(options: {
-    filters: Array<{ vendorId: number; productId: number }>;
-  }): Promise<WebUsbDevice>;
   addEventListener(type: "connect" | "disconnect", listener: EventListener): void;
   removeEventListener(type: "connect" | "disconnect", listener: EventListener): void;
 }
@@ -207,7 +204,6 @@ async function readInfo(session: OvisUsbDevice): Promise<OvisUsbDeviceInfo> {
     throw new Error(i18n.t("usb.invalidResponse"));
   }
   const deviceInfo = info as unknown as OvisUsbDeviceInfo;
-  rememberOvisSubnet(deviceInfo.device_id, deviceInfo.subnet);
   return deviceInfo;
 }
 
@@ -244,7 +240,16 @@ export async function getAuthorizedOvisUsbDevices(): Promise<OvisUsbDevice[]> {
     (device) =>
       device.vendorId === OVIS_VENDOR_ID && device.productId === OVIS_PRODUCT_ID,
   );
-  const results = await Promise.allSettled(devices.map(openOvisDevice));
+  const results = await Promise.allSettled(
+    devices.map(async (device) => {
+      try {
+        return await openOvisDevice(device);
+      } catch (error) {
+        if (device.opened) await device.close().catch(() => undefined);
+        throw error;
+      }
+    }),
+  );
   const sessions: OvisUsbDevice[] = [];
   for (const result of results) {
     if (result.status !== "fulfilled") continue;
@@ -260,24 +265,6 @@ export async function getAuthorizedOvisUsbDevices(): Promise<OvisUsbDevice[]> {
     }
   }
   return sessions;
-}
-
-export async function requestOvisUsbDevice(): Promise<OvisUsbDevice> {
-  const usb = usbManager();
-  if (!usb) throw new Error(i18n.t("usb.unsupported"));
-  const device = await usb.requestDevice({
-    filters: [{ vendorId: OVIS_VENDOR_ID, productId: OVIS_PRODUCT_ID }],
-  });
-  const session = await openOvisDevice(device);
-  if (
-    session.info.subnet !== -1 ||
-    session.info.pending_subnet !== -1 ||
-    session.info.ncm_active
-  ) {
-    await session.device.close().catch(() => undefined);
-    throw new Error(i18n.t("usb.alreadyInitialized"));
-  }
-  return session;
 }
 
 export async function refreshOvisUsbDeviceInfo(
@@ -410,6 +397,7 @@ export type OvisUsbInitializationPhase =
   | "reading-device"
   | "writing-subnet"
   | "committing"
+  | "committed"
   | "restarting"
   | "waiting"
   | "complete";
@@ -502,6 +490,7 @@ async function initializeOvisUsbDeviceUnlocked(
   }
 
   let committed = false;
+  let subnetRemembered = false;
   try {
     onPhase?.("reading-device");
     const initialInfo = await refreshOvisUsbDeviceInfo(session);
@@ -527,14 +516,23 @@ async function initializeOvisUsbDeviceUnlocked(
     onPhase?.("committing");
     await sendCommand(session, REQUEST_COMMIT);
     committed = true;
-    rememberOvisSubnet(initialInfo.device_id, subnet);
-    const committedInfo = await refreshOvisUsbDeviceInfo(session);
-    if (
-      committedInfo.device_id !== initialInfo.device_id ||
-      committedInfo.subnet !== subnet ||
-      committedInfo.pending_subnet !== -1
-    ) {
-      throw new OvisUsbInitializationError("VERIFICATION_FAILED");
+    onPhase?.("committed");
+    let committedInfo: OvisUsbDeviceInfo | null = null;
+    try {
+      committedInfo = await refreshOvisUsbDeviceInfo(session);
+    } catch {
+      // An immediate USB disconnect is expected once COMMIT starts the reboot.
+    }
+    if (committedInfo) {
+      if (
+        committedInfo.device_id !== initialInfo.device_id ||
+        committedInfo.subnet !== subnet ||
+        committedInfo.pending_subnet !== -1
+      ) {
+        throw new OvisUsbInitializationError("VERIFICATION_FAILED");
+      }
+      rememberOvisSubnet(initialInfo.device_id, subnet);
+      subnetRemembered = true;
     }
   } catch (error) {
     if (!committed) {
@@ -556,6 +554,7 @@ async function initializeOvisUsbDeviceUnlocked(
     signal.throwIfAborted();
     const info = await probeNetworkDevice(apiBaseUrl, 1_500, signal);
     if (info?.device_id === expectedDeviceId) {
+      if (!subnetRemembered) rememberOvisSubnet(expectedDeviceId, subnet);
       onPhase?.("complete");
       return { apiBaseUrl, ipAddress, info };
     }

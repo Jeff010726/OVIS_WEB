@@ -36,11 +36,8 @@ interface DeviceConnectorProps {
   connectedAt: Date | null;
   applicationLocked: boolean;
   usbAvailable: boolean;
-  usbAuthorizing: boolean;
-  usbError: string | null;
   onScan: () => void;
   onCancelScan: () => void;
-  onAuthorizeUsbDevice: () => void;
   onSelectDevice: (deviceId: string) => void;
   onConnect: () => void;
   onManualConnect: (ipAddress: string) => void;
@@ -48,6 +45,7 @@ interface DeviceConnectorProps {
   onRescan: () => void;
   onRetry: () => void;
   onCancelInitialization: () => void;
+  onRemoveUninitializedDevice: (deviceId: string) => void;
   onApplicationLockChange: (locked: boolean) => void;
   onDeviceRecovered: (apiBaseUrl: string, info: OvisDeviceInfo) => void;
 }
@@ -122,11 +120,8 @@ export function DeviceConnector({
   connectedAt,
   applicationLocked,
   usbAvailable,
-  usbAuthorizing,
-  usbError,
   onScan,
   onCancelScan,
-  onAuthorizeUsbDevice,
   onSelectDevice,
   onConnect,
   onManualConnect,
@@ -134,6 +129,7 @@ export function DeviceConnector({
   onRescan,
   onRetry,
   onCancelInitialization,
+  onRemoveUninitializedDevice,
   onApplicationLockChange,
   onDeviceRecovered,
 }: DeviceConnectorProps) {
@@ -166,6 +162,7 @@ export function DeviceConnector({
         device={selectedDevice}
         initializedDevices={initializedDevices}
         onCancel={onCancelInitialization}
+        onDisconnected={onRemoveUninitializedDevice}
         onInitialized={onDeviceRecovered}
       />
     );
@@ -182,18 +179,10 @@ export function DeviceConnector({
             onRescan={selectedDevice ? onRescan : undefined}
           />
           <ManualAddressForm onConnect={onManualConnect} />
-          {usbAvailable && (
-            <button
-              className="button button--secondary usb-authorize-button"
-              type="button"
-              disabled={usbAuthorizing}
-              onClick={onAuthorizeUsbDevice}
-            >
-              {usbAuthorizing ? <LoaderCircle className="button-spinner" size={15} /> : <Usb size={15} />}
-              {usbAuthorizing ? t("usb.authorizing") : t("usb.authorize")}
-            </button>
-          )}
-          {usbError && <small className="usb-authorization-error" role="alert">{usbError}</small>}
+          <div className="usb-policy-notice">
+            <Usb size={15} />
+            <span>{usbAvailable ? t("usb.policyHint") : t("usb.unsupported")}</span>
+          </div>
         </div>
       </div>
     );
@@ -266,6 +255,9 @@ export function DeviceConnector({
   }
 
   if (state === "results") {
+    const hasUninitializedDevice = devices.some(
+      (entry) => entry.initialization === "uninitialized",
+    );
     return (
       <div className="connector-state connector-state--results">
         <header className="discovery-heading">
@@ -283,6 +275,13 @@ export function DeviceConnector({
               : t("discovery.checkPrompt")}
           </p>
         </header>
+
+        {!hasUninitializedDevice && (
+          <div className="usb-policy-notice usb-policy-notice--results">
+            <Usb size={15} />
+            <span>{usbAvailable ? t("usb.policyHint") : t("usb.unsupported")}</span>
+          </div>
+        )}
 
         {devices.length > 0 ? (
           <div
@@ -361,12 +360,6 @@ export function DeviceConnector({
               <RefreshCw size={15} />
               {t("common.rescan")}
             </button>
-            {usbAvailable && (
-              <button className="button button--secondary" type="button" disabled={usbAuthorizing} onClick={onAuthorizeUsbDevice}>
-                {usbAuthorizing ? <LoaderCircle className="button-spinner" size={15} /> : <Usb size={15} />}
-                {usbAuthorizing ? t("usb.authorizing") : t("usb.authorize")}
-              </button>
-            )}
           </div>
           {devices.length > 0 && (
             <button
@@ -398,13 +391,6 @@ export function DeviceConnector({
             {t("discovery.scan")}
             <ArrowRight className="button__arrow" size={17} />
           </button>
-          {usbAvailable && (
-            <button className="button button--secondary usb-authorize-button" type="button" disabled={usbAuthorizing} onClick={onAuthorizeUsbDevice}>
-              {usbAuthorizing ? <LoaderCircle className="button-spinner" size={15} /> : <Usb size={15} />}
-              {usbAuthorizing ? t("usb.authorizing") : t("usb.authorize")}
-            </button>
-          )}
-          {usbError && <small className="usb-authorization-error" role="alert">{usbError}</small>}
           <ManualAddressForm onConnect={onManualConnect} />
         </div>
         <Suspense

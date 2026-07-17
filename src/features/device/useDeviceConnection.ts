@@ -16,7 +16,6 @@ import {
   getAuthorizedOvisUsbDevices,
   isWebUsbAvailable,
   onWebUsbDeviceChange,
-  requestOvisUsbDevice,
 } from "./webusb.api";
 import type {
   DeviceConnectionErrorCode,
@@ -104,8 +103,6 @@ export function useDeviceConnection(): UseDeviceConnection {
   const [applicationLocked, setApplicationLockedState] = useState(
     startupPending !== null,
   );
-  const [usbAuthorizing, setUsbAuthorizing] = useState(false);
-  const [usbError, setUsbError] = useState<string | null>(null);
   const [discoveryReport, setDiscoveryReport] =
     useState<DiscoveryReport | null>(null);
   const applicationLockedRef = useRef(startupPending !== null);
@@ -214,7 +211,6 @@ export function useDeviceConnection(): UseDeviceConnection {
     setDevice(null);
     setConnectedAt(null);
     setError(null);
-    setUsbError(null);
     setDiscoveryReport(null);
     let usbDiscovery: ReturnType<typeof getAuthorizedOvisUsbDevices> | null = null;
 
@@ -276,42 +272,6 @@ export function useDeviceConnection(): UseDeviceConnection {
       setState("error");
     }
   }, [updateDevices]);
-
-  const authorizeUsbDevice = useCallback(async () => {
-    if (applicationLockedRef.current || usbAuthorizing) return;
-    setUsbAuthorizing(true);
-    setUsbError(null);
-    try {
-      const session = await requestOvisUsbDevice();
-      const usbDevice = toUninitializedDevice(session);
-      const initialized = devicesRef.current.filter(
-        (entry): entry is InitializedDevice =>
-          entry.initialization === "initialized",
-      );
-      if (initialized.some((entry) => entry.deviceId === usbDevice.deviceId)) {
-        await closeOvisUsbDevice(session).catch(() => undefined);
-      }
-      const uninitialized = [
-        usbDevice,
-        ...devicesRef.current.filter(
-          (entry) =>
-            entry.initialization === "uninitialized" &&
-            entry.deviceId !== usbDevice.deviceId,
-        ),
-      ];
-      const combined = mergeDiscoveredDevices(initialized, uninitialized);
-      updateDevices(combined);
-      setSelectedDeviceId(usbDevice.deviceId);
-      setError(null);
-      setState("results");
-    } catch (nextError) {
-      if (!(nextError instanceof DOMException && nextError.name === "NotFoundError")) {
-        setUsbError(nextError instanceof Error ? nextError.message : String(nextError));
-      }
-    } finally {
-      setUsbAuthorizing(false);
-    }
-  }, [updateDevices, usbAuthorizing]);
 
   const cancelScan = useCallback(() => {
     if (applicationLockedRef.current) return;
@@ -468,6 +428,19 @@ export function useDeviceConnection(): UseDeviceConnection {
     setError(null);
   }, []);
 
+  const removeUninitializedDevice = useCallback(
+    (deviceId: string) => {
+      const remaining = devicesRef.current.filter(
+        (entry) =>
+          entry.initialization === "initialized" || entry.deviceId !== deviceId,
+      );
+      updateDevices(remaining);
+      if (selectedDeviceId === deviceId) setSelectedDeviceId(null);
+      setState(remaining.length > 0 ? "results" : "idle");
+    },
+    [selectedDeviceId, updateDevices],
+  );
+
   const rescan = useCallback(async () => {
     if (applicationLockedRef.current) return;
     await scan();
@@ -538,6 +511,7 @@ export function useDeviceConnection(): UseDeviceConnection {
   useEffect(() => {
     if (!isWebUsbAvailable()) return;
     return onWebUsbDeviceChange(() => {
+      if (state === "initializing") return;
       void getAuthorizedOvisUsbDevices()
         .then((sessions) => {
           const initialized = devicesRef.current.filter(
@@ -549,12 +523,15 @@ export function useDeviceConnection(): UseDeviceConnection {
             sessions.map(toUninitializedDevice),
           );
           updateDevices(combined);
+          if (combined.length > 0 && (state === "idle" || state === "error")) {
+            setError(null);
+            setState("results");
+          }
           if (
             selectedDeviceId &&
             !combined.some((entry) => entry.deviceId === selectedDeviceId)
           ) {
             setSelectedDeviceId(null);
-            if (state === "initializing") setState("results");
           }
         })
         .catch(() => undefined);
@@ -579,12 +556,9 @@ export function useDeviceConnection(): UseDeviceConnection {
     connectedAt,
     applicationLocked,
     usbAvailable: isWebUsbAvailable(),
-    usbAuthorizing,
-    usbError,
     discoveryReport,
     scan,
     cancelScan,
-    authorizeUsbDevice,
     selectDevice,
     connect,
     connectManualAddress,
@@ -592,6 +566,7 @@ export function useDeviceConnection(): UseDeviceConnection {
     rescan,
     retry,
     cancelInitialization,
+    removeUninitializedDevice,
     setApplicationLocked,
     adoptRecoveredDevice,
   };

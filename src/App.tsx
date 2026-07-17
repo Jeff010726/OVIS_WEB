@@ -51,11 +51,8 @@ function App() {
             connectedAt={connection.connectedAt}
             applicationLocked={connection.applicationLocked}
             usbAvailable={connection.usbAvailable}
-            usbAuthorizing={connection.usbAuthorizing}
-            usbError={connection.usbError}
             onScan={() => void connection.scan()}
             onCancelScan={connection.cancelScan}
-            onAuthorizeUsbDevice={() => void connection.authorizeUsbDevice()}
             onSelectDevice={connection.selectDevice}
             onConnect={() => void connection.connect()}
             onManualConnect={(ipAddress) =>
@@ -65,6 +62,7 @@ function App() {
             onRescan={() => void connection.rescan()}
             onRetry={() => void connection.retry()}
             onCancelInitialization={connection.cancelInitialization}
+            onRemoveUninitializedDevice={connection.removeUninitializedDevice}
             onApplicationLockChange={connection.setApplicationLocked}
             onDeviceRecovered={connection.adoptRecoveredDevice}
           />
