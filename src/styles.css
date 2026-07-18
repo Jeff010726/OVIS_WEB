@@ -170,10 +170,37 @@ a:focus-visible {
 
 .workspace-gate__actions {
   width: 100%;
-  margin-top: 30px;
+  margin-top: 14px;
   display: flex;
   align-items: center;
   gap: 9px;
+}
+
+.workspace-gate__download-section {
+  width: 100%;
+  margin-top: 30px;
+}
+
+.workspace-gate__download-section > strong {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.workspace-gate__downloads {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workspace-gate__downloads .button {
+  min-width: 0;
+  min-height: 46px;
+  justify-content: center;
+  text-decoration: none;
 }
 
 .workspace-gate__actions .button {
@@ -3130,6 +3157,10 @@ a:focus-visible {
   .workspace-gate__actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .workspace-gate__downloads {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .workspace-gate__actions .button {

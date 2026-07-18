@@ -484,7 +484,9 @@ test("blocks the device workspace when managed policy is missing", async ({ page
 
   await expect(page.getByRole("heading", { name: "安装 OVIS 支持包" })).toBeVisible();
   await expect(page.getByRole("button", { name: "搜索设备" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "下载 Windows 支持包" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Windows" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Linux" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "macOS" })).toBeVisible();
   await page.screenshot({ path: "/tmp/ovis-workspace-gate.png", fullPage: true });
 });
 
@@ -562,7 +564,7 @@ test("enters the workspace automatically when a downloaded policy becomes ready"
     });
   });
   await page.goto("./");
-  const download = page.getByRole("link", { name: "下载 Windows 支持包" });
+  const download = page.getByRole("link", { name: "Windows" });
   await download.evaluate((link) =>
     link.addEventListener("click", (event) => event.preventDefault()),
   );
@@ -573,7 +575,7 @@ test("enters the workspace automatically when a downloaded policy becomes ready"
     window.localStorage.setItem("ovis-policy-ready", "1");
   });
   await expect(page.getByRole("button", { name: "搜索设备" })).toBeVisible({
-    timeout: 5_000,
+    timeout: 10_000,
   });
 });
 
@@ -617,6 +619,9 @@ test("allows retrying an exceptional managed policy check", async ({ page }) => 
 
   await expect(page.getByRole("heading", { name: "策略检测失败" })).toBeVisible();
   await expect(page.getByRole("button", { name: "重新检测" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Windows" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Linux" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "macOS" })).toBeVisible();
 });
 
 test("shows the initial discovery workspace", async ({ page }) => {

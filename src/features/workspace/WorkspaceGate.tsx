@@ -11,8 +11,15 @@ import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import type { UseWorkspacePolicy } from "./workspace-policy.types";
 
 const WINDOWS_SETUP_URL =
+  import.meta.env.VITE_WORKSPACE_SETUP_WINDOWS_URL ??
   import.meta.env.VITE_WORKSPACE_SETUP_URL ??
   "https://ovis.aimorelogy.com/downloads/OVIS-Workspace-Setup.exe";
+const LINUX_SETUP_URL =
+  import.meta.env.VITE_WORKSPACE_SETUP_LINUX_URL ??
+  "https://ovis.aimorelogy.com/downloads/OVIS-Workspace-Setup.deb";
+const MACOS_SETUP_URL =
+  import.meta.env.VITE_WORKSPACE_SETUP_MACOS_URL ??
+  "https://ovis.aimorelogy.com/downloads/OVIS-Workspace-Setup.mobileconfig";
 
 interface WorkspaceGateProps {
   policy: UseWorkspacePolicy;
@@ -22,7 +29,7 @@ export function WorkspaceGate({ policy }: WorkspaceGateProps) {
   const { t } = useTranslation();
   const isChecking = policy.state === "checking";
   const isWaiting = policy.state === "waiting";
-  const canDownload = policy.state === "missing" || policy.state === "outdated";
+  const showDownloads = !isChecking && !isWaiting && policy.state !== "ready";
   const Icon = isChecking || isWaiting
     ? LoaderCircle
     : policy.state === "unsupported" || policy.state === "error"
@@ -70,20 +77,42 @@ export function WorkspaceGate({ policy }: WorkspaceGateProps) {
             </p>
           )}
 
+          {showDownloads && (
+            <div className="workspace-gate__download-section">
+              <strong>{t("workspaceGate.downloadTitle")}</strong>
+              <div className="workspace-gate__downloads">
+                <a
+                  className="button button--primary"
+                  href={WINDOWS_SETUP_URL}
+                  download
+                  onClick={policy.startInstallation}
+                >
+                  <Download size={16} />
+                  {t("workspaceGate.downloadWindows")}
+                </a>
+                <a
+                  className="button button--secondary"
+                  href={LINUX_SETUP_URL}
+                  download
+                  onClick={policy.startInstallation}
+                >
+                  <Download size={16} />
+                  {t("workspaceGate.downloadLinux")}
+                </a>
+                <a
+                  className="button button--secondary"
+                  href={MACOS_SETUP_URL}
+                  download
+                  onClick={policy.startInstallation}
+                >
+                  <Download size={16} />
+                  {t("workspaceGate.downloadMacos")}
+                </a>
+              </div>
+            </div>
+          )}
+
           <div className="workspace-gate__actions">
-            {canDownload && (
-              <a
-                className="button button--primary"
-                href={WINDOWS_SETUP_URL}
-                download
-                onClick={policy.startInstallation}
-              >
-                <Download size={16} />
-                {policy.state === "outdated"
-                  ? t("workspaceGate.updateWindows")
-                  : t("workspaceGate.downloadWindows")}
-              </a>
-            )}
             {!isChecking && (
               <button
                 className="button button--secondary"
@@ -96,14 +125,14 @@ export function WorkspaceGate({ policy }: WorkspaceGateProps) {
             )}
           </div>
 
-          {canDownload && (
+          {showDownloads && (
             <small className="workspace-gate__installer-note">
               {t("workspaceGate.installerNote")}
             </small>
           )}
-          {policy.state !== "unsupported" && (
+          {showDownloads && (
             <small className="workspace-gate__platform-note">
-              {t("workspaceGate.macPending")}
+              {t("workspaceGate.platformNote")}
             </small>
           )}
         </section>
