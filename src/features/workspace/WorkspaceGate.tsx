@@ -1,11 +1,12 @@
 import {
   AlertTriangle,
   CheckCircle2,
-  Download,
   LoaderCircle,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
+import { FaMicrosoft } from "react-icons/fa6";
+import { SiApple, SiLinux } from "react-icons/si";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import type { UseWorkspacePolicy } from "./workspace-policy.types";
@@ -82,30 +83,30 @@ export function WorkspaceGate({ policy }: WorkspaceGateProps) {
               <strong>{t("workspaceGate.downloadTitle")}</strong>
               <div className="workspace-gate__downloads">
                 <a
-                  className="button button--primary"
+                  className="button button--secondary workspace-gate__download"
                   href={WINDOWS_SETUP_URL}
                   download
                   onClick={policy.startInstallation}
                 >
-                  <Download size={16} />
+                  <FaMicrosoft aria-hidden="true" />
                   {t("workspaceGate.downloadWindows")}
                 </a>
                 <a
-                  className="button button--secondary"
+                  className="button button--secondary workspace-gate__download"
                   href={LINUX_SETUP_URL}
                   download
                   onClick={policy.startInstallation}
                 >
-                  <Download size={16} />
+                  <SiLinux aria-hidden="true" />
                   {t("workspaceGate.downloadLinux")}
                 </a>
                 <a
-                  className="button button--secondary"
+                  className="button button--secondary workspace-gate__download"
                   href={MACOS_SETUP_URL}
                   download
                   onClick={policy.startInstallation}
                 >
-                  <Download size={16} />
+                  <SiApple aria-hidden="true" />
                   {t("workspaceGate.downloadMacos")}
                 </a>
               </div>

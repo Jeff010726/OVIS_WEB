@@ -484,9 +484,25 @@ test("blocks the device workspace when managed policy is missing", async ({ page
 
   await expect(page.getByRole("heading", { name: "安装 OVIS 支持包" })).toBeVisible();
   await expect(page.getByRole("button", { name: "搜索设备" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Windows" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Linux" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "macOS" })).toBeVisible();
+  const platformLinks = ["Windows", "Linux", "macOS"].map((name) =>
+    page.getByRole("link", { name }),
+  );
+  for (const link of platformLinks) {
+    await expect(link).toBeVisible();
+    await expect(link.locator("svg")).toHaveCount(1);
+  }
+  const platformButtonStyles = await Promise.all(
+    platformLinks.map((link) =>
+      link.evaluate((element) => ({
+        height: element.getBoundingClientRect().height,
+        background: getComputedStyle(element).backgroundColor,
+        border: getComputedStyle(element).borderColor,
+      })),
+    ),
+  );
+  expect(new Set(platformButtonStyles.map(({ height }) => height)).size).toBe(1);
+  expect(new Set(platformButtonStyles.map(({ background }) => background)).size).toBe(1);
+  expect(new Set(platformButtonStyles.map(({ border }) => border)).size).toBe(1);
   await page.screenshot({ path: "/tmp/ovis-workspace-gate.png", fullPage: true });
 });
 
