@@ -687,6 +687,68 @@ a:focus-visible {
   margin-inline: 0;
 }
 
+.usb-authorization {
+  width: 100%;
+  margin-top: 24px;
+  padding: 14px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.usb-authorization > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.usb-authorization > div > svg {
+  flex: 0 0 auto;
+  color: var(--muted-light);
+}
+
+.usb-authorization > div > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.usb-authorization strong {
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 620;
+}
+
+.usb-authorization small,
+.usb-authorization__error {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.usb-authorization .button {
+  min-width: 148px;
+  min-height: 40px;
+  flex: 0 0 auto;
+  padding-inline: 12px;
+  font-size: 10px;
+}
+
+.usb-authorization__error {
+  display: block;
+  margin-top: 8px;
+  color: var(--danger);
+}
+
+.usb-authorization + .button--primary,
+.usb-authorization__error + .button--primary {
+  margin-top: 16px;
+}
+
 .usb-provisioning {
   width: 100%;
   margin-top: 24px;
@@ -3382,6 +3444,15 @@ a:focus-visible {
   }
 
   .workspace-gate__actions .button {
+    width: 100%;
+  }
+
+  .usb-authorization {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .usb-authorization .button {
     width: 100%;
   }
 

@@ -37,7 +37,10 @@ interface DeviceConnectorProps {
   applicationLocked: boolean;
   usbAvailable: boolean;
   usbPreflightReady: boolean;
+  usbAuthorizing: boolean;
+  authorizedUsbDeviceCount: number;
   usbIssue: string | null;
+  onAuthorizeUsb: () => void;
   onScan: () => void;
   onCancelScan: () => void;
   onSelectDevice: (deviceId: string) => void;
@@ -124,7 +127,10 @@ export function DeviceConnector({
   applicationLocked,
   usbAvailable,
   usbPreflightReady,
+  usbAuthorizing,
+  authorizedUsbDeviceCount,
   usbIssue,
+  onAuthorizeUsb,
   onScan,
   onCancelScan,
   onSelectDevice,
@@ -393,10 +399,39 @@ export function DeviceConnector({
         <div className="idle-copy">
           <h2>{t("discovery.idleTitle")}</h2>
           <p>{t("discovery.idleDescription")}</p>
+          {usbAvailable && (
+            <div className="usb-authorization">
+              <div>
+                <Usb size={15} />
+                <span>
+                  <strong>{t("usb.authorizeTitle")}</strong>
+                  <small>
+                    {authorizedUsbDeviceCount > 0
+                      ? t("usb.deviceCount", { count: authorizedUsbDeviceCount })
+                      : t("usb.authorizeHint")}
+                  </small>
+                </span>
+              </div>
+              <button
+                className="button button--secondary"
+                type="button"
+                disabled={!usbPreflightReady || usbAuthorizing}
+                onClick={onAuthorizeUsb}
+              >
+                {usbAuthorizing ? (
+                  <LoaderCircle className="button-spinner" size={15} />
+                ) : (
+                  <Usb size={15} />
+                )}
+                {usbAuthorizing ? t("usb.authorizing") : t("usb.authorize")}
+              </button>
+            </div>
+          )}
+          {usbIssue && <small className="usb-authorization__error">{usbIssue}</small>}
           <button
             className="button button--primary"
             type="button"
-            disabled={usbAvailable && !usbPreflightReady}
+            disabled={(usbAvailable && !usbPreflightReady) || usbAuthorizing}
             onClick={onScan}
           >
             <Search size={18} />

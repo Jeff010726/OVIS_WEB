@@ -11,23 +11,6 @@ const ENGLISH_MOBILE_CONFIG_TEST_TITLE =
 test.beforeEach(async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     const events = new EventTarget();
-    Object.defineProperty(navigator, "managed", {
-      configurable: true,
-      value: {
-        getManagedConfiguration: async (keys: string[]) => {
-          Object.defineProperty(window, "__ovisManagedKeys", {
-            configurable: true,
-            value: keys,
-          });
-          return {
-            ovis_workspace_policy_version: 1,
-            webusb_vendor_id: 13126,
-            webusb_product_id: 4110,
-            allowed_origin: window.location.origin,
-          };
-        },
-      },
-    });
     Object.defineProperty(navigator, "usb", {
       configurable: true,
       value: {
@@ -419,312 +402,100 @@ async function mockConfigurationRead(page: Page) {
   });
 }
 
-interface MockWorkspacePolicyOptions {
-  surface?: "managed" | "device" | "missing";
-  policy?: Record<string, unknown>;
-  reject?: boolean;
-  webUsb?: boolean;
-}
+test("opens device discovery without a managed workspace policy", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "managed", { configurable: true, value: undefined });
+    Object.defineProperty(navigator, "device", { configurable: true, value: undefined });
+  });
+  await page.goto("./");
 
-async function mockWorkspacePolicy(
-  page: Page,
-  {
-    surface = "managed",
-    policy = {
-      ovis_workspace_policy_version: 1,
-      webusb_vendor_id: 13126,
-      webusb_product_id: 4110,
-      allowed_origin: "current",
-    },
-    reject = false,
-    webUsb = true,
-  }: MockWorkspacePolicyOptions,
-) {
-  await page.addInitScript(
-    ({ policySurface, policyValue, shouldReject, hasWebUsb }) => {
-      const resolvedPolicy = {
-        ...policyValue,
-        ...(policyValue.allowed_origin === "current"
-          ? { allowed_origin: window.location.origin }
-          : {}),
-      };
-      const provider = {
-        getManagedConfiguration: async () => {
-          if (shouldReject) throw new Error("Managed configuration unavailable");
-          return resolvedPolicy;
+  await expect(page.getByRole("button", { name: "搜索设备" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /安装 OVIS 支持包/ })).toHaveCount(0);
+});
+
+test("manually authorizes a filtered OVIS USB device before discovery", async ({
+  page,
+}) => {
+  const usbDeviceId = "OVIS-1842-MANUALAUTH0001";
+  await mockPolicyWebUsbDevices(page, [{ deviceId: usbDeviceId, authorized: false }]);
+  await page.route("**/api/v1/device/info", (route) => route.abort("connectionrefused"));
+  await page.goto("./");
+
+  await page.getByRole("button", { name: "授权 USB 设备" }).click();
+  await expect(page.getByText("已授权 1 台设备")).toBeVisible();
+  const requestState = await page.evaluate(() => {
+    const state = (window as unknown as {
+      __ovisUsbRequestState: { count: number; options: unknown };
+    }).__ovisUsbRequestState;
+    return { count: state.count, options: state.options };
+  });
+  expect(requestState).toEqual({
+    count: 1,
+    options: {
+      filters: [
+        {
+          vendorId: 0x3346,
+          productId: 0x100e,
+          classCode: 0xff,
+          subclassCode: 0x4f,
+          protocolCode: 0x01,
         },
-      };
-      Object.defineProperty(navigator, "managed", {
-        configurable: true,
-        value: policySurface === "managed" ? provider : undefined,
-      });
-      Object.defineProperty(navigator, "device", {
-        configurable: true,
-        value: policySurface === "device" ? provider : undefined,
-      });
-      if (!hasWebUsb) {
-        Object.defineProperty(navigator, "usb", {
-          configurable: true,
-          value: undefined,
-        });
-      }
+      ],
     },
-    {
-      policySurface: surface,
-      policyValue: policy,
-      shouldReject: reject,
-      hasWebUsb: webUsb,
-    },
-  );
-}
-
-test("blocks the device workspace when managed policy is missing", async ({ page }) => {
-  await mockWorkspacePolicy(page, { surface: "missing" });
-  await page.goto("./");
-
-  await expect(page.getByRole("heading", { name: "安装 OVIS 支持包" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "搜索设备" })).toHaveCount(0);
-  const platformTabs = ["Windows", "Linux", "macOS"].map((name) =>
-    page.getByRole("tab", { name }),
-  );
-  for (const tab of platformTabs) {
-    await expect(tab).toBeVisible();
-    await expect(tab.locator("svg")).toHaveCount(1);
-  }
-  await platformTabs[1].click();
-  await expect(platformTabs[1]).toHaveAttribute("aria-selected", "true");
-
-  const deb = page.getByRole("link", { name: /DEB 软件包/ });
-  const rpm = page.getByRole("link", { name: /RPM 软件包/ });
-  await expect(deb).toHaveAttribute(
-    "href",
-    "https://ovis.aimorelogy.com/downloads/ovis-workspace-support_1.0.0_all.deb",
-  );
-  await expect(rpm).toHaveAttribute(
-    "href",
-    "https://ovis.aimorelogy.com/downloads/ovis-workspace-support-1.0.0.noarch.rpm",
-  );
-  await expect(page.getByRole("link", { name: "SHA-256 校验和" })).toHaveAttribute(
-    "href",
-    "https://ovis.aimorelogy.com/downloads/SHA256SUMS",
-  );
-  for (const installer of [deb, rpm]) {
-    await expect(installer).toHaveCSS("background-color", "rgb(239, 239, 237)");
-    await expect(installer).toHaveCSS("color", "rgb(8, 8, 8)");
-  }
-
-  await platformTabs[0].click();
-  const windowsInstaller = page.getByRole("link", { name: /Windows 安装程序/ });
-  await expect(windowsInstaller).toHaveAttribute(
-    "href",
-    "https://ovis.aimorelogy.com/downloads/OVIS-Workspace-Setup-v1.exe",
-  );
-  await expect(windowsInstaller).toHaveCSS("background-color", "rgb(239, 239, 237)");
-  await expect(windowsInstaller).toHaveCSS("color", "rgb(8, 8, 8)");
-
-  await platformTabs[2].click();
-  const macosInstaller = page.getByRole("link", { name: /macOS 安装程序/ });
-  await expect(macosInstaller).toHaveAttribute(
-    "href",
-    "https://github.com/Jeff010726/ovis.web.github.io/releases/download/ovis-workspace-support-v1.0.0/OVIS-Workspace-Support-1.0.0.pkg",
-  );
-  const enterpriseProfile = page.getByRole("link", { name: /企业配置描述文件/ });
-  await expect(enterpriseProfile).toHaveAttribute(
-    "href",
-    "https://ovis.aimorelogy.com/downloads/OVIS-Workspace-Support.mobileconfig",
-  );
-  for (const installer of [macosInstaller, enterpriseProfile]) {
-    await expect(installer).toHaveCSS("background-color", "rgb(239, 239, 237)");
-    await expect(installer).toHaveCSS("color", "rgb(8, 8, 8)");
-  }
-
-  const platformButtonStyles = await Promise.all(
-    platformTabs.map((tab) =>
-      tab.evaluate((element) => ({
-        height: element.getBoundingClientRect().height,
-      })),
-    ),
-  );
-  expect(new Set(platformButtonStyles.map(({ height }) => height)).size).toBe(1);
-  await page.screenshot({ path: "/tmp/ovis-workspace-gate.png", fullPage: true });
-});
-
-test("selects the macOS PKG as the default macOS download", async ({ page }) => {
-  await page.addInitScript(() => {
-    const current = (navigator as Navigator & {
-      userAgentData?: { brands?: Array<{ brand: string; version: string }> };
-    }).userAgentData;
-    Object.defineProperty(navigator, "userAgentData", {
-      configurable: true,
-      value: { brands: current?.brands, platform: "macOS" },
-    });
   });
-  await mockWorkspacePolicy(page, { surface: "missing" });
-  await page.goto("./");
 
-  await expect(page.getByRole("tab", { name: "macOS" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  await expect(page.getByRole("link", { name: /macOS 安装程序/ })).toBeVisible();
-  await expect(page.getByRole("link", { name: /企业配置描述文件/ })).toBeVisible();
+  await page.getByRole("button", { name: "搜索设备" }).click();
+  await expect(page.getByRole("radio", { name: new RegExp(usbDeviceId) })).toBeVisible();
 });
 
-test("accepts the Chrome managed configuration surface with no USB attached", async ({
+test("cancelling USB authorization does not block network discovery", async ({
   page,
 }) => {
-  await mockWorkspacePolicy(page, { surface: "managed" });
-  await page.goto("./");
-
-  await expect(page.getByRole("button", { name: "搜索设备" })).toBeVisible();
-  await expect(page.getByText("等待搜索")).toBeVisible();
-});
-
-test("accepts the Edge device managed configuration surface", async ({ page }) => {
-  await mockWorkspacePolicy(page, { surface: "device" });
-  await page.goto("./");
-
-  await expect(page.getByRole("button", { name: "搜索设备" })).toBeVisible();
-});
-
-test("requires an update for an old workspace policy", async ({ page }) => {
-  await mockWorkspacePolicy(page, {
-    policy: {
-      ovis_workspace_policy_version: 0,
-      webusb_vendor_id: 13126,
-      webusb_product_id: 4110,
-      allowed_origin: "current",
-    },
+  await mockPolicyWebUsbDevices(page, []);
+  await page.route("**/api/v1/device/info", (route) => {
+    if (requestHost(route) === "192.168.42.1") return fulfillJson(route, deviceInfo);
+    return route.abort("connectionrefused");
   });
   await page.goto("./");
 
-  await expect(page.getByRole("heading", { name: "更新 OVIS 支持包" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "搜索设备" })).toHaveCount(0);
+  await page.getByRole("button", { name: "授权 USB 设备" }).click();
+  await expect(page.locator(".usb-authorization__error")).toHaveCount(0);
+  await page.getByRole("button", { name: "搜索设备" }).click();
+  await expect(page.getByRole("radio", { name: /OVIS Camera/ })).toBeVisible();
 });
 
-for (const mismatch of [
-  { name: "origin", field: "allowed_origin", value: "https://wrong.example" },
-  { name: "VID", field: "webusb_vendor_id", value: 1 },
-  { name: "PID", field: "webusb_product_id", value: 1 },
-]) {
-  test(`rejects a managed policy with mismatched ${mismatch.name}`, async ({ page }) => {
-    await mockWorkspacePolicy(page, {
-      policy: {
-        ovis_workspace_policy_version: 1,
-        webusb_vendor_id: 13126,
-        webusb_product_id: 4110,
-        allowed_origin: "current",
-        [mismatch.field]: mismatch.value,
-      },
-    });
-    await page.goto("./");
-
-    await expect(page.getByRole("heading", { name: "安装 OVIS 支持包" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "搜索设备" })).toHaveCount(0);
-  });
-}
-
-test("enters the workspace automatically when a downloaded policy becomes ready", async ({
+test("manually authorizes multiple USB devices before one discovery", async ({
   page,
 }) => {
+  const deviceIds = ["OVIS-1842-MANUALAUTH0002", "OVIS-1842-MANUALAUTH0003"];
+  await mockPolicyWebUsbDevices(
+    page,
+    deviceIds.map((deviceId) => ({ deviceId, authorized: false })),
+  );
+  await page.route("**/api/v1/device/info", (route) => route.abort("connectionrefused"));
+  await page.goto("./");
+
+  await page.getByRole("button", { name: "授权 USB 设备" }).click();
+  await expect(page.getByText("已授权 1 台设备")).toBeVisible();
+  await page.getByRole("button", { name: "授权 USB 设备" }).click();
+  await expect(page.getByText("已授权 2 台设备")).toBeVisible();
+  await page.getByRole("button", { name: "搜索设备" }).click();
+  await expect(page.getByRole("radio")).toHaveCount(2);
+});
+
+test("discovers network devices when WebUSB is unavailable", async ({ page }) => {
   await page.addInitScript(() => {
-    Object.defineProperty(navigator, "managed", {
-      configurable: true,
-      value: {
-        getManagedConfiguration: async () =>
-          window.localStorage.getItem("ovis-policy-ready") === "1"
-            ? {
-                ovis_workspace_policy_version: 1,
-                webusb_vendor_id: 13126,
-                webusb_product_id: 4110,
-                allowed_origin: window.location.origin,
-              }
-            : {},
-      },
-    });
+    Object.defineProperty(navigator, "usb", { configurable: true, value: undefined });
+  });
+  await page.route("**/api/v1/device/info", (route) => {
+    if (requestHost(route) === "192.168.42.1") return fulfillJson(route, deviceInfo);
+    return route.abort("connectionrefused");
   });
   await page.goto("./");
-  await page.getByRole("tab", { name: "Linux" }).click();
-  const download = page.getByRole("link", { name: /DEB 软件包/ });
-  await download.evaluate((link) =>
-    link.addEventListener("click", (event) => event.preventDefault()),
-  );
-  await download.click();
-  await expect(page.getByRole("heading", { name: "正在下载 Workspace 支持包" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "等待浏览器策略生效" })).toBeVisible();
-  await expect(page.getByText("安装完成后需要重启浏览器")).toBeVisible();
-  await page.screenshot({ path: "/tmp/ovis-workspace-waiting.png", fullPage: true });
 
-  await page.evaluate(() => {
-    window.localStorage.setItem("ovis-policy-ready", "1");
-  });
-  await expect(page.getByRole("button", { name: "搜索设备" })).toBeVisible({
-    timeout: 10_000,
-  });
-});
-
-test("suggests a browser restart after waiting 60 seconds", async ({ page }) => {
-  await mockWorkspacePolicy(page, { surface: "missing" });
-  await page.clock.install();
-  await page.goto("./");
-  await page.getByRole("tab", { name: "Linux" }).click();
-  const download = page.getByRole("link", { name: /DEB 软件包/ });
-  await download.evaluate((link) =>
-    link.addEventListener("click", (event) => event.preventDefault()),
-  );
-  await download.click();
-
-  await page.clock.fastForward(700);
-  await expect(page.getByRole("heading", { name: "等待浏览器策略生效" })).toBeVisible();
-  await page.clock.fastForward(60_000);
-  await expect(page.locator(".workspace-gate__restart-hint")).toContainText(
-    "彻底关闭所有 Chrome 或 Edge 窗口",
-  );
-});
-
-test("checks policy again after a refresh and blocks a removed policy", async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "managed", {
-      configurable: true,
-      value: {
-        getManagedConfiguration: async () =>
-          window.localStorage.getItem("ovis-policy-removed") === "1"
-            ? {}
-            : {
-                ovis_workspace_policy_version: 1,
-                webusb_vendor_id: 13126,
-                webusb_product_id: 4110,
-                allowed_origin: window.location.origin,
-              },
-      },
-    });
-  });
-  await page.goto("./");
-  await expect(page.getByRole("button", { name: "搜索设备" })).toBeVisible();
-  await page.evaluate(() => localStorage.setItem("ovis-policy-removed", "1"));
-  await page.reload();
-
-  await expect(page.getByRole("heading", { name: "安装 OVIS 支持包" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "搜索设备" })).toHaveCount(0);
-});
-
-test("shows unsupported when WebUSB is unavailable", async ({ page }) => {
-  await mockWorkspacePolicy(page, { webUsb: false });
-  await page.goto("./");
-
-  await expect(page.getByRole("heading", { name: "当前浏览器不受支持" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "搜索设备" })).toHaveCount(0);
-});
-
-test("allows retrying an exceptional managed policy check", async ({ page }) => {
-  await mockWorkspacePolicy(page, { reject: true });
-  await page.goto("./");
-
-  await expect(page.getByRole("heading", { name: "策略检测失败" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "重新检测" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Windows" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Linux" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "macOS" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "授权 USB 设备" })).toHaveCount(0);
+  await page.getByRole("button", { name: "搜索设备" }).click();
+  await expect(page.getByRole("radio", { name: /OVIS Camera/ })).toBeVisible();
 });
 
 test("shows the initial discovery workspace", async ({ page }) => {
@@ -738,18 +509,9 @@ test("shows the initial discovery workspace", async ({ page }) => {
     /images\/aimorelogy-logo\.png$/,
   );
   await expect(page.getByRole("button", { name: "搜索设备" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "授权 USB 设备" })).toBeVisible();
   await expect(page.getByText("等待搜索")).toBeVisible();
-  await expect(page.getByRole("button", { name: /授权 USB|Authorize USB/ })).toHaveCount(0);
   await expect(page.getByText("参数配置")).toHaveCount(0);
-  const managedKeys = await page.evaluate(
-    () => (window as unknown as { __ovisManagedKeys: string[] }).__ovisManagedKeys,
-  );
-  expect(managedKeys).toEqual([
-    "ovis_workspace_policy_version",
-    "webusb_vendor_id",
-    "webusb_product_id",
-    "allowed_origin",
-  ]);
   await page.screenshot({ path: "/tmp/ovis-idle-desktop.png", fullPage: true });
 });
 
@@ -1092,7 +854,7 @@ test("diagnoses USB open, interface, and protocol failures without hiding networ
   await expect(page.getByText(/USB 设备返回了无效的配置响应/)).toBeVisible();
 });
 
-test("never requests a USB chooser when managed policy is ready", async ({ page }) => {
+test("network discovery never opens the USB chooser", async ({ page }) => {
   await mockPolicyWebUsbDevices(page, []);
   await page.route("**/api/v1/device/info", (route) => {
     if (requestHost(route) === "192.168.42.1") return fulfillJson(route, deviceInfo);
@@ -1114,7 +876,7 @@ test("never requests a USB chooser when managed policy is ready", async ({ page 
   expect(requestState.options).toBeNull();
 });
 
-test("adds and removes policy USB devices on connect and disconnect", async ({ page }) => {
+test("adds and removes authorized USB devices on connect and disconnect", async ({ page }) => {
   const usbDeviceId = "OVIS-1842-USB000000000005";
   await mockPolicyWebUsbDevices(page, [{ deviceId: usbDeviceId, connected: false }]);
   await page.route("**/api/v1/device/info", (route) => {
@@ -1124,7 +886,9 @@ test("adds and removes policy USB devices on connect and disconnect", async ({ p
 
   await page.goto("./");
   await page.getByRole("button", { name: "搜索设备" }).click();
-  await expect(page.getByText("当前没有连接未初始化的 USB 设备。"))
+  await expect(
+    page.getByText("当前没有已授权的未初始化 USB 设备，请先授权 USB 访问后重新搜索。"),
+  )
     .toBeVisible();
 
   await page.evaluate(() => {
@@ -1146,7 +910,9 @@ test("adds and removes policy USB devices on connect and disconnect", async ({ p
     testDevices[0].disconnect();
   });
   await expect(page.getByRole("radio", { name: new RegExp(usbDeviceId) })).toHaveCount(0);
-  await expect(page.getByText("当前没有连接未初始化的 USB 设备。"))
+  await expect(
+    page.getByText("当前没有已授权的未初始化 USB 设备，请先授权 USB 访问后重新搜索。"),
+  )
     .toBeVisible();
 });
 

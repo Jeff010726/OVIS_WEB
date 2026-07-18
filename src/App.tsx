@@ -3,8 +3,6 @@ import { ConnectionStatus } from "./components/ConnectionStatus";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import { DeviceConnector } from "./features/device/DeviceConnector";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
-import { WorkspaceGate } from "./features/workspace/WorkspaceGate";
-import { useWorkspacePolicy } from "./features/workspace/useWorkspacePolicy";
 
 function DeviceWorkspace() {
   const { t } = useTranslation();
@@ -54,7 +52,10 @@ function DeviceWorkspace() {
             applicationLocked={connection.applicationLocked}
             usbAvailable={connection.usbAvailable}
             usbPreflightReady={connection.usbPreflightReady}
+            usbAuthorizing={connection.usbAuthorizing}
+            authorizedUsbDeviceCount={connection.authorizedUsbDeviceCount}
             usbIssue={connection.usbIssue}
+            onAuthorizeUsb={() => void connection.authorizeUsbDevice()}
             onScan={() => void connection.scan()}
             onCancelScan={connection.cancelScan}
             onSelectDevice={connection.selectDevice}
@@ -78,8 +79,6 @@ function DeviceWorkspace() {
 }
 
 function App() {
-  const policy = useWorkspacePolicy();
-  if (policy.state !== "ready") return <WorkspaceGate policy={policy} />;
   return <DeviceWorkspace />;
 }
 

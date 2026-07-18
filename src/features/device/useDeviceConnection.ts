@@ -18,7 +18,9 @@ import {
   forgetOvisSubnet,
   getAuthorizedOvisUsbDevices,
   isWebUsbAvailable,
+  isUsbAuthorizationCancelled,
   onWebUsbDeviceChange,
+  requestOvisUsbDevice,
 } from "./webusb.api";
 import type {
   DeviceConnectionErrorCode,
@@ -119,6 +121,8 @@ export function useDeviceConnection(): UseDeviceConnection {
   const [usbPreflightReady, setUsbPreflightReady] = useState(
     !isWebUsbAvailable(),
   );
+  const [usbAuthorizing, setUsbAuthorizing] = useState(false);
+  const [authorizedUsbDeviceCount, setAuthorizedUsbDeviceCount] = useState(0);
   const [usbIssue, setUsbIssue] = useState<string | null>(null);
   const applicationLockedRef = useRef(startupPending !== null);
   const operationGeneration = useRef(0);
@@ -191,6 +195,7 @@ export function useDeviceConnection(): UseDeviceConnection {
           return;
         }
         setUsbIssue(report.errors.length > 0 ? report.errors.join(" · ") : null);
+        setAuthorizedUsbDeviceCount(report.devices.length);
         void Promise.allSettled(report.devices.map(closeOvisUsbDevice));
       })
       .catch((nextError) => {
@@ -204,6 +209,26 @@ export function useDeviceConnection(): UseDeviceConnection {
     return () => {
       active = false;
     };
+  }, []);
+
+  const authorizeUsbDevice = useCallback(async () => {
+    if (!isWebUsbAvailable() || applicationLockedRef.current) return;
+    setUsbAuthorizing(true);
+    setUsbIssue(null);
+    try {
+      const requestedSession = await requestOvisUsbDevice();
+      await closeOvisUsbDevice(requestedSession);
+      const report = await discoverAuthorizedOvisUsbDevices();
+      setAuthorizedUsbDeviceCount(report.devices.length);
+      setUsbIssue(report.errors.length > 0 ? report.errors.join(" · ") : null);
+      await Promise.allSettled(report.devices.map(closeOvisUsbDevice));
+    } catch (nextError) {
+      if (!isUsbAuthorizationCancelled(nextError)) {
+        setUsbIssue(nextError instanceof Error ? nextError.message : String(nextError));
+      }
+    } finally {
+      setUsbAuthorizing(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -284,6 +309,7 @@ export function useDeviceConnection(): UseDeviceConnection {
       setUsbIssue(
         usbReport.errors.length > 0 ? usbReport.errors.join(" · ") : null,
       );
+      setAuthorizedUsbDeviceCount(usbSessions.length);
       const initialized = networkReport.devices.filter(
         (entry): entry is InitializedDevice =>
           entry.initialization === "initialized",
@@ -594,6 +620,7 @@ export function useDeviceConnection(): UseDeviceConnection {
       if (state === "initializing") return;
       void getAuthorizedOvisUsbDevices()
         .then((sessions) => {
+          setAuthorizedUsbDeviceCount(sessions.length);
           const initialized = devicesRef.current.filter(
             (entry): entry is InitializedDevice =>
               entry.initialization === "initialized",
@@ -637,9 +664,12 @@ export function useDeviceConnection(): UseDeviceConnection {
     applicationLocked,
     usbAvailable: isWebUsbAvailable(),
     usbPreflightReady,
+    usbAuthorizing,
+    authorizedUsbDeviceCount,
     usbIssue,
     discoveryReport,
     scan,
+    authorizeUsbDevice,
     cancelScan,
     selectDevice,
     connect,

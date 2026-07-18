@@ -73,6 +73,15 @@ interface WebUsbDevice {
 
 interface WebUsbManager {
   getDevices(): Promise<WebUsbDevice[]>;
+  requestDevice(options: {
+    filters: Array<{
+      vendorId: number;
+      productId: number;
+      classCode: number;
+      subclassCode: number;
+      protocolCode: number;
+    }>;
+  }): Promise<WebUsbDevice>;
   addEventListener(type: "connect" | "disconnect", listener: EventListener): void;
   removeEventListener(type: "connect" | "disconnect", listener: EventListener): void;
 }
@@ -291,6 +300,44 @@ export async function discoverAuthorizedOvisUsbDevices(): Promise<OvisUsbDiscove
   }
   return { devices: sessions, errors };
 }
+
+export async function requestOvisUsbDevice(): Promise<OvisUsbDevice> {
+  const usb = usbManager();
+  if (!usb) throw new Error(i18n.t("usb.unsupported"));
+  const device = await usb.requestDevice({
+    filters: [
+      {
+        vendorId: OVIS_VENDOR_ID,
+        productId: OVIS_PRODUCT_ID,
+        classCode: OVIS_INTERFACE_CLASS,
+        subclassCode: OVIS_INTERFACE_SUBCLASS,
+        protocolCode: OVIS_INTERFACE_PROTOCOL,
+      },
+    ],
+  });
+  if (device.vendorId !== OVIS_VENDOR_ID || device.productId !== OVIS_PRODUCT_ID) {
+    throw new Error(i18n.t("usb.invalidResponse"));
+  }
+
+  let session: OvisUsbDevice | null = null;
+  try {
+    session = await openOvisDevice(device);
+    if (
+      session.info.subnet !== -1 ||
+      session.info.pending_subnet !== -1 ||
+      session.info.ncm_active
+    ) {
+      throw new Error(i18n.t("usb.notUninitialized"));
+    }
+    return session;
+  } catch (error) {
+    if (device.opened) await device.close().catch(() => undefined);
+    throw error;
+  }
+}
+
+export const isUsbAuthorizationCancelled = (error: unknown) =>
+  error instanceof DOMException && error.name === "NotFoundError";
 
 export async function getAuthorizedOvisUsbDevices(): Promise<OvisUsbDevice[]> {
   return (await discoverAuthorizedOvisUsbDevices()).devices;
