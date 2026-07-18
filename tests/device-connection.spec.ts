@@ -484,38 +484,79 @@ test("blocks the device workspace when managed policy is missing", async ({ page
 
   await expect(page.getByRole("heading", { name: "安装 OVIS 支持包" })).toBeVisible();
   await expect(page.getByRole("button", { name: "搜索设备" })).toHaveCount(0);
-  const platformLinks = ["Windows", "Linux", "macOS"].map((name) =>
-    page.getByRole("link", { name }),
+  const platformTabs = ["Windows", "Linux", "macOS"].map((name) =>
+    page.getByRole("tab", { name }),
   );
-  for (const link of platformLinks) {
-    await expect(link).toBeVisible();
-    await expect(link.locator("svg")).toHaveCount(1);
+  for (const tab of platformTabs) {
+    await expect(tab).toBeVisible();
+    await expect(tab.locator("svg")).toHaveCount(1);
   }
-  await expect(platformLinks[0]).toHaveAttribute(
+  await platformTabs[1].click();
+  await expect(platformTabs[1]).toHaveAttribute("aria-selected", "true");
+
+  const deb = page.getByRole("link", { name: /DEB 软件包/ });
+  const rpm = page.getByRole("link", { name: /RPM 软件包/ });
+  await expect(deb).toHaveAttribute(
+    "href",
+    "https://ovis.aimorelogy.com/downloads/ovis-workspace-support_1.0.0_all.deb",
+  );
+  await expect(rpm).toHaveAttribute(
+    "href",
+    "https://ovis.aimorelogy.com/downloads/ovis-workspace-support-1.0.0.noarch.rpm",
+  );
+  await expect(page.getByRole("link", { name: "SHA-256 校验和" })).toHaveAttribute(
+    "href",
+    "https://ovis.aimorelogy.com/downloads/SHA256SUMS",
+  );
+
+  await platformTabs[0].click();
+  const windowsInstaller = page.getByRole("link", { name: /Windows 安装程序/ });
+  await expect(windowsInstaller).toHaveAttribute(
     "href",
     "https://ovis.aimorelogy.com/downloads/OVIS-Workspace-Setup-v1.exe",
   );
-  await expect(platformLinks[1]).toHaveAttribute(
+
+  await platformTabs[2].click();
+  const macosInstaller = page.getByRole("link", { name: /macOS 安装程序/ });
+  await expect(macosInstaller).toHaveAttribute(
     "href",
-    "https://ovis.aimorelogy.com/downloads/OVIS-Workspace-Setup-v1.deb",
+    "https://github.com/Jeff010726/ovis.web.github.io/releases/download/ovis-workspace-support-v1.0.0/OVIS-Workspace-Support-1.0.0.pkg",
   );
-  await expect(platformLinks[2]).toHaveAttribute(
+  await expect(page.getByRole("link", { name: /企业配置描述文件/ })).toHaveAttribute(
     "href",
-    "https://ovis.aimorelogy.com/downloads/OVIS-Workspace-Setup-v1.mobileconfig",
+    "https://ovis.aimorelogy.com/downloads/OVIS-Workspace-Support.mobileconfig",
   );
+
   const platformButtonStyles = await Promise.all(
-    platformLinks.map((link) =>
-      link.evaluate((element) => ({
+    platformTabs.map((tab) =>
+      tab.evaluate((element) => ({
         height: element.getBoundingClientRect().height,
-        background: getComputedStyle(element).backgroundColor,
-        border: getComputedStyle(element).borderColor,
       })),
     ),
   );
   expect(new Set(platformButtonStyles.map(({ height }) => height)).size).toBe(1);
-  expect(new Set(platformButtonStyles.map(({ background }) => background)).size).toBe(1);
-  expect(new Set(platformButtonStyles.map(({ border }) => border)).size).toBe(1);
   await page.screenshot({ path: "/tmp/ovis-workspace-gate.png", fullPage: true });
+});
+
+test("selects the macOS PKG as the default macOS download", async ({ page }) => {
+  await page.addInitScript(() => {
+    const current = (navigator as Navigator & {
+      userAgentData?: { brands?: Array<{ brand: string; version: string }> };
+    }).userAgentData;
+    Object.defineProperty(navigator, "userAgentData", {
+      configurable: true,
+      value: { brands: current?.brands, platform: "macOS" },
+    });
+  });
+  await mockWorkspacePolicy(page, { surface: "missing" });
+  await page.goto("./");
+
+  await expect(page.getByRole("tab", { name: "macOS" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByRole("link", { name: /macOS 安装程序/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /企业配置描述文件/ })).toBeVisible();
 });
 
 test("accepts the Chrome managed configuration surface with no USB attached", async ({
@@ -592,11 +633,13 @@ test("enters the workspace automatically when a downloaded policy becomes ready"
     });
   });
   await page.goto("./");
-  const download = page.getByRole("link", { name: "Windows" });
+  await page.getByRole("tab", { name: "Linux" }).click();
+  const download = page.getByRole("link", { name: /DEB 软件包/ });
   await download.evaluate((link) =>
     link.addEventListener("click", (event) => event.preventDefault()),
   );
   await download.click();
+  await expect(page.getByRole("heading", { name: "正在下载 Workspace 支持包" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "等待浏览器策略生效" })).toBeVisible();
 
   await page.evaluate(() => {
@@ -605,6 +648,23 @@ test("enters the workspace automatically when a downloaded policy becomes ready"
   await expect(page.getByRole("button", { name: "搜索设备" })).toBeVisible({
     timeout: 10_000,
   });
+});
+
+test("suggests a browser restart after waiting 60 seconds", async ({ page }) => {
+  await mockWorkspacePolicy(page, { surface: "missing" });
+  await page.clock.install();
+  await page.goto("./");
+  await page.getByRole("tab", { name: "Linux" }).click();
+  const download = page.getByRole("link", { name: /DEB 软件包/ });
+  await download.evaluate((link) =>
+    link.addEventListener("click", (event) => event.preventDefault()),
+  );
+  await download.click();
+
+  await page.clock.fastForward(700);
+  await expect(page.getByRole("heading", { name: "等待浏览器策略生效" })).toBeVisible();
+  await page.clock.fastForward(60_000);
+  await expect(page.getByText(/彻底关闭所有 Chrome 或 Edge 窗口/)).toBeVisible();
 });
 
 test("checks policy again after a refresh and blocks a removed policy", async ({ page }) => {
@@ -647,9 +707,9 @@ test("allows retrying an exceptional managed policy check", async ({ page }) => 
 
   await expect(page.getByRole("heading", { name: "策略检测失败" })).toBeVisible();
   await expect(page.getByRole("button", { name: "重新检测" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Windows" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Linux" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "macOS" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Windows" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Linux" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "macOS" })).toBeVisible();
 });
 
 test("shows the initial discovery workspace", async ({ page }) => {

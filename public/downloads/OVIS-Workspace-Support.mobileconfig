@@ -17,10 +17,9 @@
                 <key>WebAppInstallForceList</key>
                 <array>
                   <dict>
-                    <key>url</key><string>https://ovis.aimorelogy.com/</string>
+                    <key>url</key><string>https://ovis.aimorelogy.com</string>
                     <key>default_launch_container</key><string>window</string>
-                    <key>create_desktop_shortcut</key><true/>
-                    <key>custom_name</key><string>OVIS Workspace</string>
+                    <key>create_desktop_shortcut</key><false/>
                   </dict>
                 </array>
                 <key>ManagedConfigurationPerOrigin</key>
@@ -59,10 +58,9 @@
                 <key>WebAppInstallForceList</key>
                 <array>
                   <dict>
-                    <key>url</key><string>https://ovis.aimorelogy.com/</string>
+                    <key>url</key><string>https://ovis.aimorelogy.com</string>
                     <key>default_launch_container</key><string>window</string>
-                    <key>create_desktop_shortcut</key><true/>
-                    <key>custom_name</key><string>OVIS Workspace</string>
+                    <key>create_desktop_shortcut</key><false/>
                   </dict>
                 </array>
                 <key>ManagedConfigurationPerOrigin</key>

@@ -82,9 +82,9 @@ a:focus-visible {
 }
 
 .workspace-gate__panel {
-  width: min(100%, 680px);
-  min-height: 430px;
-  padding: clamp(34px, 6vw, 72px);
+  width: min(100%, 760px);
+  min-height: 500px;
+  padding: clamp(34px, 5vw, 64px);
   position: relative;
   display: flex;
   align-items: center;
@@ -196,23 +196,123 @@ a:focus-visible {
   text-align: center;
 }
 
-.workspace-gate__downloads {
+.workspace-gate__platforms {
   width: 100%;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.workspace-gate__downloads .button {
+.workspace-gate__platform {
   min-width: 0;
-  min-height: 46px;
+  min-height: 44px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--muted);
+  background: #101010;
+  cursor: pointer;
+}
+
+.workspace-gate__platform[aria-selected="true"] {
+  border-color: #767676;
+  color: var(--text);
+  background: #181818;
+}
+
+.workspace-gate__platform svg {
+  font-size: 17px;
+}
+
+.workspace-gate__packages {
+  width: 100%;
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workspace-gate__packages > :only-child {
+  grid-column: 1 / -1;
+}
+
+.workspace-gate__packages .button {
+  min-width: 0;
+  min-height: 58px;
+  padding-inline: 16px;
+  justify-content: flex-start;
   text-decoration: none;
 }
 
 .workspace-gate__download svg {
   flex: 0 0 auto;
   font-size: 18px;
+}
+
+.workspace-gate__download > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.workspace-gate__download > span b {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-gate__download > span small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.workspace-gate__download > svg:last-child {
+  margin-left: auto;
+  font-size: 15px;
+}
+
+.workspace-gate__download--primary {
+  border: 1px solid #efefed;
+  color: #080808;
+  background: #efefed;
+}
+
+.workspace-gate__download--primary span small {
+  color: #555;
+}
+
+.workspace-gate__checksum {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 6px;
+  color: var(--muted-light);
+  font-size: 10px;
+  text-decoration: none;
+}
+
+.workspace-gate__package-links {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding-top: 4px;
+}
+
+.workspace-gate__package-links a {
+  color: var(--muted-light);
+  font-size: 10px;
+  text-underline-offset: 3px;
 }
 
 .workspace-gate__actions .button {
@@ -3174,8 +3274,14 @@ a:focus-visible {
     flex-direction: column;
   }
 
-  .workspace-gate__downloads {
+  .workspace-gate__platforms,
+  .workspace-gate__packages {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-gate__checksum,
+  .workspace-gate__package-links {
+    grid-column: 1;
   }
 
   .workspace-gate__actions .button {

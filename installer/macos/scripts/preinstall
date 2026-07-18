@@ -1,0 +1,48 @@
+#!/bin/bash
+set -euo pipefail
+
+support_dir="/Library/Application Support/Aimorelogy/OVIS Workspace"
+ownership_marker="$support_dir/.installed-by-ovis-workspace-pkg"
+policy_keys=(
+  WebUsbAllowDevicesForUrls
+  WebAppInstallForceList
+  ManagedConfigurationPerOrigin
+)
+browser_domains=(com.google.Chrome com.microsoft.Edge)
+
+for process_name in "Google Chrome" "Microsoft Edge"; do
+  if /usr/bin/pgrep -x "$process_name" >/dev/null 2>&1; then
+    echo "Close $process_name after saving your work, then run this installer again." >&2
+    exit 1
+  fi
+done
+
+profiles_dump="$(/usr/bin/mktemp /tmp/ovis-workspace-profiles.XXXXXX)"
+trap '/bin/rm -f "$profiles_dump"' EXIT
+if /usr/bin/profiles show -type configuration -output stdout-xml >"$profiles_dump" 2>/dev/null; then
+  for domain in "${browser_domains[@]}"; do
+    if /usr/bin/grep -q "$domain" "$profiles_dump"; then
+      for key in "${policy_keys[@]}"; do
+        if /usr/bin/grep -q "$key" "$profiles_dump"; then
+          echo "An installed configuration profile already manages $key for $domain." >&2
+          echo "Contact your administrator instead of installing a local policy." >&2
+          exit 1
+        fi
+      done
+    fi
+  done
+fi
+
+if [[ ! -f "$ownership_marker" ]]; then
+  for domain in "${browser_domains[@]}"; do
+    plist="/Library/Managed Preferences/$domain.plist"
+    [[ -f "$plist" ]] || continue
+    for key in "${policy_keys[@]}"; do
+      if /usr/bin/plutil -extract "$key" raw -o - "$plist" >/dev/null 2>&1; then
+        echo "$plist already defines $key and is not owned by OVIS Workspace Support." >&2
+        echo "Remove or reconcile that policy with your administrator, then retry." >&2
+        exit 1
+      fi
+    done
+  done
+fi

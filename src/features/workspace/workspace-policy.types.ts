@@ -1,6 +1,7 @@
 export type WorkspacePolicyState =
   | "checking"
   | "missing"
+  | "downloading"
   | "outdated"
   | "waiting"
   | "ready"
@@ -15,7 +16,7 @@ export interface OvisWorkspacePolicy {
 }
 
 export interface WorkspacePolicyCheck {
-  state: Exclude<WorkspacePolicyState, "checking" | "waiting">;
+  state: Exclude<WorkspacePolicyState, "checking" | "downloading" | "waiting">;
   policy: Partial<OvisWorkspacePolicy> | null;
 }
 

@@ -1,0 +1,11 @@
+Package: ovis-workspace-support
+Version: 1.0.0
+Section: admin
+Priority: optional
+Architecture: all
+Maintainer: Aimorelogy <support@aimorelogy.com>
+Depends: python3
+Description: Managed browser policies for OVIS Workspace
+ Installs Google Chrome and Microsoft Edge policies that register OVIS
+ Workspace, expose its managed configuration, and authorize supported OVIS
+ WebUSB devices. No service, extension, driver, or kernel module is installed.

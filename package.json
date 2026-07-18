@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build:installers": "scripts/build-installers.sh",
+    "build:installers:macos": "scripts/build-macos-installers.sh",
     "build": "node scripts/verify-managed-policy.mjs && node scripts/verify-installers.mjs && tsc --noEmit -p tsconfig.app.json && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:installers": "scripts/test-linux-installers.sh && node scripts/verify-installers.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

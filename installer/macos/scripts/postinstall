@@ -1,0 +1,61 @@
+#!/bin/bash
+set -euo pipefail
+
+support_dir="/Library/Application Support/Aimorelogy/OVIS Workspace"
+policy_source="$support_dir/ovis-workspace-browser-policies.json"
+backup_dir="$support_dir/backups"
+managed_dir="/Library/Managed Preferences"
+policy_keys=(
+  WebUsbAllowDevicesForUrls
+  WebAppInstallForceList
+  ManagedConfigurationPerOrigin
+)
+
+/usr/bin/install -d -o root -g wheel -m 0755 "$managed_dir" "$backup_dir"
+
+merge_domain() {
+  local domain="$1"
+  local target="$managed_dir/$domain.plist"
+  local backup="$backup_dir/$domain.plist.before-ovis"
+  local temporary
+
+  if [[ -f "$target" && ! -e "$backup" ]]; then
+    /bin/cp -p "$target" "$backup"
+  fi
+
+  temporary="$(/usr/bin/mktemp "$managed_dir/.${domain}.XXXXXX")"
+  if [[ -f "$target" ]]; then
+    /bin/cp "$target" "$temporary"
+  else
+    /usr/bin/plutil -create xml1 "$temporary"
+  fi
+
+  for key in "${policy_keys[@]}"; do
+    value="$(/usr/bin/plutil -extract "$key" json -o - "$policy_source")"
+    /usr/bin/plutil -remove "$key" "$temporary" >/dev/null 2>&1 || true
+    /usr/bin/plutil -insert "$key" -json "$value" "$temporary"
+  done
+
+  /usr/bin/plutil -convert binary1 "$temporary"
+  /usr/bin/plutil -lint "$temporary" >/dev/null
+  /usr/sbin/chown root:wheel "$temporary"
+  /bin/chmod 0644 "$temporary"
+  /bin/mv -f "$temporary" "$target"
+}
+
+merge_domain com.google.Chrome
+merge_domain com.microsoft.Edge
+/usr/bin/touch "$support_dir/.installed-by-ovis-workspace-pkg"
+/usr/sbin/chown -R root:wheel "$support_dir"
+/bin/chmod 0644 "$support_dir/.installed-by-ovis-workspace-pkg"
+
+/usr/bin/killall cfprefsd >/dev/null 2>&1 || true
+
+console_user="$(/usr/bin/stat -f '%Su' /dev/console)"
+if [[ "$console_user" != "root" && "$console_user" != "loginwindow" ]]; then
+  user_id="$(/usr/bin/id -u "$console_user")"
+  /bin/launchctl asuser "$user_id" /usr/bin/sudo -u "$console_user" \
+    /usr/bin/open "https://ovis.aimorelogy.com/setup-complete" || true
+fi
+
+echo "OVIS Workspace support installed. Reopen Chrome or Edge to load the policies."

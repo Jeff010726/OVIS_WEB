@@ -1,0 +1,39 @@
+#!/bin/bash
+set -euo pipefail
+
+support_dir="/Library/Application Support/Aimorelogy/OVIS Workspace"
+managed_dir="/Library/Managed Preferences"
+policy_keys=(
+  WebUsbAllowDevicesForUrls
+  WebAppInstallForceList
+  ManagedConfigurationPerOrigin
+)
+
+profiles_dump="$(/usr/bin/mktemp /tmp/ovis-workspace-profiles.XXXXXX)"
+trap '/bin/rm -f "$profiles_dump"' EXIT
+if /usr/bin/profiles show -type configuration -output stdout-xml >"$profiles_dump" 2>/dev/null; then
+  if /usr/bin/grep -Eq 'com\.google\.Chrome|com\.microsoft\.Edge' "$profiles_dump" && \
+     /usr/bin/grep -Eq 'WebUsbAllowDevicesForUrls|WebAppInstallForceList|ManagedConfigurationPerOrigin' "$profiles_dump"; then
+    echo "OVIS policies are supplied by a configuration profile and cannot be removed locally." >&2
+    echo "Contact your administrator to remove the managed profile." >&2
+    exit 1
+  fi
+fi
+
+for domain in com.google.Chrome com.microsoft.Edge; do
+  target="$managed_dir/$domain.plist"
+  [[ -f "$target" ]] || continue
+  temporary="$(/usr/bin/mktemp "$managed_dir/.${domain}.XXXXXX")"
+  /bin/cp "$target" "$temporary"
+  for key in "${policy_keys[@]}"; do
+    /usr/bin/plutil -remove "$key" "$temporary" >/dev/null 2>&1 || true
+  done
+  /usr/bin/plutil -lint "$temporary" >/dev/null
+  /usr/sbin/chown root:wheel "$temporary"
+  /bin/chmod 0644 "$temporary"
+  /bin/mv -f "$temporary" "$target"
+done
+
+/bin/rm -f "$support_dir/.installed-by-ovis-workspace-pkg"
+/usr/bin/killall cfprefsd >/dev/null 2>&1 || true
+echo "OVIS Workspace policies removed. Reopen Chrome or Edge to apply the change."

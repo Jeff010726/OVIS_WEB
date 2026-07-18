@@ -1,0 +1,68 @@
+name: Build notarized macOS support packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Support package version
+        required: true
+        default: 1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Import Developer ID Installer certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.MACOS_INSTALLER_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_INSTALLER_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.MACOS_BUILD_KEYCHAIN_PASSWORD }}
+        run: |
+          certificate="$RUNNER_TEMP/installer-certificate.p12"
+          keychain="$RUNNER_TEMP/ovis-build.keychain-db"
+          printf '%s' "$CERTIFICATE_BASE64" | /usr/bin/base64 -D > "$certificate"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security import "$certificate" -P "$CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$keychain"
+          security list-keychain -d user -s "$keychain" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$keychain"
+
+      - name: Configure Apple notarization
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          xcrun notarytool store-credentials ovis-notary \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD"
+
+      - name: Build, sign, notarize, and staple packages
+        env:
+          OVIS_INSTALLER_SIGN_IDENTITY: ${{ secrets.MACOS_INSTALLER_SIGN_IDENTITY }}
+          OVIS_NOTARY_PROFILE: ovis-notary
+          OVIS_WORKSPACE_VERSION: ${{ inputs.version }}
+        run: scripts/build-macos-installers.sh
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: ovis-workspace-macos-${{ inputs.version }}
+          path: dist/installers/macos/*
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          tag="ovis-workspace-support-v$VERSION"
+          gh release view "$tag" >/dev/null 2>&1 || \
+            gh release create "$tag" --title "OVIS Workspace Support $VERSION" --notes "Signed and notarized macOS support packages."
+          gh release upload "$tag" dist/installers/macos/* --clobber

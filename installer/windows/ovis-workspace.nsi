@@ -11,7 +11,7 @@ SetCompressor /SOLID lzma
 !define PRODUCT_WEB_SITE "https://ovis.aimorelogy.com"
 !define PRODUCT_UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\OVISWorkspaceSupport"
 
-!define WEB_APP_POLICY "[{$\"url$\":$\"https://ovis.aimorelogy.com/$\",$\"default_launch_container$\":$\"window$\",$\"create_desktop_shortcut$\":true,$\"custom_name$\":$\"OVIS Workspace$\"}]"
+!define WEB_APP_POLICY "[{$\"url$\":$\"https://ovis.aimorelogy.com$\",$\"default_launch_container$\":$\"window$\",$\"create_desktop_shortcut$\":false}]"
 !define MANAGED_CONFIG_POLICY "[{$\"origin$\":$\"https://ovis.aimorelogy.com$\",$\"managed_configuration_url$\":$\"https://ovis.aimorelogy.com/managed/ovis-workspace-policy-v1.json$\",$\"managed_configuration_hash$\":$\"4e0436a4ad1a5dbf10bda92b3548b982935a755b83227c3f4de2104202ca9d5a$\"}]"
 !define WEBUSB_POLICY "[{$\"devices$\":[{$\"vendor_id$\":13126,$\"product_id$\":4110}],$\"urls$\":[$\"https://ovis.aimorelogy.com$\"]}]"
 
