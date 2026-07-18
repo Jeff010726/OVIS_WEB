@@ -3,8 +3,10 @@ import { ConnectionStatus } from "./components/ConnectionStatus";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import { DeviceConnector } from "./features/device/DeviceConnector";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
+import { WorkspaceGate } from "./features/workspace/WorkspaceGate";
+import { useWorkspacePolicy } from "./features/workspace/useWorkspacePolicy";
 
-function App() {
+function DeviceWorkspace() {
   const { t } = useTranslation();
   const connection = useDeviceConnection();
   const isConfigurationView =
@@ -72,6 +74,12 @@ function App() {
       </main>
     </div>
   );
+}
+
+function App() {
+  const policy = useWorkspacePolicy();
+  if (policy.state !== "ready") return <WorkspaceGate policy={policy} />;
+  return <DeviceWorkspace />;
 }
 
 export default App;

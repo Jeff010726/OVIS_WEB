@@ -1,0 +1,6 @@
+{
+  "ovis_workspace_policy_version": 1,
+  "webusb_vendor_id": 13126,
+  "webusb_product_id": 4110,
+  "allowed_origin": "https://ovis.aimorelogy.com"
+}
