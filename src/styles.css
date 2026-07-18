@@ -163,6 +163,40 @@ a:focus-visible {
   font-size: 11px;
 }
 
+.workspace-gate__restart-required {
+  width: min(100%, 560px);
+  margin-top: 18px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  border: 1px solid #3a3a3a;
+  color: var(--text);
+  background: #111;
+  text-align: left;
+}
+
+.workspace-gate__restart-required > svg {
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.workspace-gate__restart-required > div {
+  display: grid;
+  gap: 4px;
+}
+
+.workspace-gate__restart-required strong {
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.workspace-gate__restart-required span {
+  color: var(--muted-light);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
 .workspace-gate__panel > .eyebrow {
   justify-content: center;
 }
@@ -1120,8 +1154,10 @@ a:focus-visible {
   color: #d7d7d7;
 }
 
-.device-result[data-initialization="uninitialized"] .device-result__visual img {
-  filter: brightness(0.72) contrast(1.08) grayscale(0.22);
+.device-result[data-initialization="uninitialized"] .device-result__visual img,
+.device-result[data-initialization="uninitialized"]:hover .device-result__visual img,
+.device-result[data-initialization="uninitialized"][aria-checked="true"] .device-result__visual img {
+  filter: grayscale(1) brightness(0.76) contrast(1.14);
 }
 
 .device-result__details {

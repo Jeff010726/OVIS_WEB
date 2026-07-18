@@ -508,6 +508,10 @@ test("blocks the device workspace when managed policy is missing", async ({ page
     "href",
     "https://ovis.aimorelogy.com/downloads/SHA256SUMS",
   );
+  for (const installer of [deb, rpm]) {
+    await expect(installer).toHaveCSS("background-color", "rgb(239, 239, 237)");
+    await expect(installer).toHaveCSS("color", "rgb(8, 8, 8)");
+  }
 
   await platformTabs[0].click();
   const windowsInstaller = page.getByRole("link", { name: /Windows 安装程序/ });
@@ -515,6 +519,8 @@ test("blocks the device workspace when managed policy is missing", async ({ page
     "href",
     "https://ovis.aimorelogy.com/downloads/OVIS-Workspace-Setup-v1.exe",
   );
+  await expect(windowsInstaller).toHaveCSS("background-color", "rgb(239, 239, 237)");
+  await expect(windowsInstaller).toHaveCSS("color", "rgb(8, 8, 8)");
 
   await platformTabs[2].click();
   const macosInstaller = page.getByRole("link", { name: /macOS 安装程序/ });
@@ -522,10 +528,15 @@ test("blocks the device workspace when managed policy is missing", async ({ page
     "href",
     "https://github.com/Jeff010726/ovis.web.github.io/releases/download/ovis-workspace-support-v1.0.0/OVIS-Workspace-Support-1.0.0.pkg",
   );
-  await expect(page.getByRole("link", { name: /企业配置描述文件/ })).toHaveAttribute(
+  const enterpriseProfile = page.getByRole("link", { name: /企业配置描述文件/ });
+  await expect(enterpriseProfile).toHaveAttribute(
     "href",
     "https://ovis.aimorelogy.com/downloads/OVIS-Workspace-Support.mobileconfig",
   );
+  for (const installer of [macosInstaller, enterpriseProfile]) {
+    await expect(installer).toHaveCSS("background-color", "rgb(239, 239, 237)");
+    await expect(installer).toHaveCSS("color", "rgb(8, 8, 8)");
+  }
 
   const platformButtonStyles = await Promise.all(
     platformTabs.map((tab) =>
@@ -641,6 +652,8 @@ test("enters the workspace automatically when a downloaded policy becomes ready"
   await download.click();
   await expect(page.getByRole("heading", { name: "正在下载 Workspace 支持包" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "等待浏览器策略生效" })).toBeVisible();
+  await expect(page.getByText("安装完成后需要重启浏览器")).toBeVisible();
+  await page.screenshot({ path: "/tmp/ovis-workspace-waiting.png", fullPage: true });
 
   await page.evaluate(() => {
     window.localStorage.setItem("ovis-policy-ready", "1");
@@ -664,7 +677,9 @@ test("suggests a browser restart after waiting 60 seconds", async ({ page }) => 
   await page.clock.fastForward(700);
   await expect(page.getByRole("heading", { name: "等待浏览器策略生效" })).toBeVisible();
   await page.clock.fastForward(60_000);
-  await expect(page.getByText(/彻底关闭所有 Chrome 或 Edge 窗口/)).toBeVisible();
+  await expect(page.locator(".workspace-gate__restart-hint")).toContainText(
+    "彻底关闭所有 Chrome 或 Edge 窗口",
+  );
 });
 
 test("checks policy again after a refresh and blocks a removed policy", async ({ page }) => {
@@ -972,6 +987,19 @@ test("merges initialized network and authorized WebUSB devices", async ({ page }
   await expect(
     page.getByRole("radio", { name: new RegExp(usbDeviceId) }),
   ).toBeVisible();
+  const uninitializedResult = page.getByRole("radio", {
+    name: new RegExp(usbDeviceId),
+  });
+  const uninitializedImage = uninitializedResult.locator("img");
+  await expect(uninitializedImage).toHaveCSS(
+    "filter",
+    "grayscale(1) brightness(0.76) contrast(1.14)",
+  );
+  await uninitializedResult.hover();
+  await expect(uninitializedImage).toHaveCSS(
+    "filter",
+    "grayscale(1) brightness(0.76) contrast(1.14)",
+  );
   await expect(page.getByText("需要初始化")).toBeVisible();
   await page.screenshot({ path: "/tmp/ovis-unified-discovery.png", fullPage: true });
 
@@ -1167,7 +1195,7 @@ test("initializes an authorized USB device and reconnects only its identity", as
   await expect(
     page.getByRole("heading", { name: "设备配置", level: 3 }),
   ).toBeVisible({ timeout: 12_000 });
-  await expect(page.getByText("192.168.61.1:8080/api/v1")).toBeVisible();
+  await expect(page.getByText("192.168.61.1", { exact: true })).toBeVisible();
   expect(targetRequests).toBeGreaterThanOrEqual(2);
   const rememberedSubnets = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("ovis-ncm-subnets") ?? "{}"),
@@ -1298,7 +1326,7 @@ test("validates and connects a manually entered device address", async ({
   await page.locator(".manual-connect").getByRole("button", { name: "连接" }).click();
   await expect(page.getByText("正在验证设备地址")).toBeVisible();
   await expect(page.getByText("设备在线").first()).toBeVisible();
-  await expect(page.getByText("192.168.55.1:8080/api/v1")).toBeVisible();
+  await expect(page.getByText("192.168.55.1", { exact: true })).toBeVisible();
   expect(deviceRequests).toBe(1);
 });
 
@@ -1326,7 +1354,7 @@ test("selects, confirms, connects, and disconnects locally", async ({ page }) =>
   await expect(page.getByText("设备配置", { exact: true }).last()).toBeVisible();
   await expect(page.getByRole("region", { name: "主码流" })).toBeVisible();
   await expect(page.getByRole("switch", { name: "启用 OSD" })).toBeChecked();
-  await expect(page.getByText("192.168.42.1:8080/api/v1")).toBeVisible();
+  await expect(page.getByText("192.168.42.1", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "配置分类" }),
   ).toBeVisible();
@@ -1539,6 +1567,9 @@ test(RESPONSIVE_CONFIG_TEST_TITLE, async ({
   await expect(workspace).toBeVisible();
   await expect(dashboard).toBeVisible();
   await expect(sectionMenu).toBeVisible();
+  await expect(dashboard.locator(".device-dashboard__meta dd").nth(1)).toHaveText(
+    "192.168.42.1",
+  );
   await expect(page.getByRole("button", { name: "01 Video Streams" })).toHaveAttribute(
     "aria-current",
     "true",
@@ -1741,7 +1772,7 @@ test("searches the address pool and reconnects only the original device id", asy
 
   await expect(page.getByText("正在等待设备恢复连接")).toBeVisible();
   await expect(page.getByText("配置应用成功")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("192.168.44.1:8080/api/v1")).toBeVisible();
+  await expect(page.getByText("192.168.44.1", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "OVIS Camera B" })).toHaveCount(0);
 });
 

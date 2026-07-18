@@ -128,6 +128,15 @@ export function WorkspaceGate({ policy }: WorkspaceGateProps) {
               <span>{t("workspaceGate.waitingStatus")}</span>
             </div>
           )}
+          {isWaiting && (
+            <div className="workspace-gate__restart-required">
+              <RefreshCw size={17} />
+              <div>
+                <strong>{t("workspaceGate.restartRequiredTitle")}</strong>
+                <span>{t("workspaceGate.restartRequiredDetail")}</span>
+              </div>
+            </div>
+          )}
           {isWaiting && policy.longWaiting && (
             <p className="workspace-gate__restart-hint">
               {t("workspaceGate.restartHint")}
@@ -160,7 +169,7 @@ export function WorkspaceGate({ policy }: WorkspaceGateProps) {
               <div className="workspace-gate__packages" role="tabpanel">
                 {platform === "windows" && (
                   <a
-                    className="button button--secondary workspace-gate__download"
+                    className="button workspace-gate__download workspace-gate__download--primary"
                     href={DOWNLOAD_URLS.windows}
                     download
                     onClick={downloadStarted}
@@ -177,7 +186,7 @@ export function WorkspaceGate({ policy }: WorkspaceGateProps) {
                 {platform === "linux" && (
                   <>
                     <a
-                      className="button button--secondary workspace-gate__download"
+                      className="button workspace-gate__download workspace-gate__download--primary"
                       href={DOWNLOAD_URLS.linuxDeb}
                       download
                       onClick={downloadStarted}
@@ -190,7 +199,7 @@ export function WorkspaceGate({ policy }: WorkspaceGateProps) {
                       <Download size={15} />
                     </a>
                     <a
-                      className="button button--secondary workspace-gate__download"
+                      className="button workspace-gate__download workspace-gate__download--primary"
                       href={DOWNLOAD_URLS.linuxRpm}
                       download
                       onClick={downloadStarted}
@@ -224,7 +233,7 @@ export function WorkspaceGate({ policy }: WorkspaceGateProps) {
                       <Download size={15} />
                     </a>
                     <a
-                      className="button button--secondary workspace-gate__download"
+                      className="button workspace-gate__download workspace-gate__download--primary"
                       href={DOWNLOAD_URLS.macosMobileconfig}
                       download
                       onClick={downloadStarted}

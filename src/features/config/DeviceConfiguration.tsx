@@ -70,8 +70,16 @@ function Toggle({ checked, disabled = false, label, onChange }: ToggleProps) {
   );
 }
 
-const endpointLabel = (apiBaseUrl: string) =>
-  apiBaseUrl.replace(/^https?:\/\//, "");
+const endpointLabel = (apiBaseUrl: string) => {
+  try {
+    return new URL(apiBaseUrl).hostname;
+  } catch {
+    return apiBaseUrl
+      .replace(/^https?:\/\//, "")
+      .replace(/:\d+(?:\/.*)?$/, "")
+      .replace(/\/.*$/, "");
+  }
+};
 
 const formatConnectionTime = (value: Date | null, locale: string) =>
   value
