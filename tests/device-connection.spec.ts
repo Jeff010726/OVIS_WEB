@@ -413,76 +413,6 @@ test("opens device discovery without a managed workspace policy", async ({ page 
   await expect(page.getByRole("heading", { name: /安装 OVIS 支持包/ })).toHaveCount(0);
 });
 
-test("manually authorizes a filtered OVIS USB device before discovery", async ({
-  page,
-}) => {
-  const usbDeviceId = "OVIS-1842-MANUALAUTH0001";
-  await mockPolicyWebUsbDevices(page, [{ deviceId: usbDeviceId, authorized: false }]);
-  await page.route("**/api/v1/device/info", (route) => route.abort("connectionrefused"));
-  await page.goto("./");
-
-  await page.getByRole("button", { name: "授权 USB 设备" }).click();
-  await expect(page.getByText("已授权 1 台设备")).toBeVisible();
-  const requestState = await page.evaluate(() => {
-    const state = (window as unknown as {
-      __ovisUsbRequestState: { count: number; options: unknown };
-    }).__ovisUsbRequestState;
-    return { count: state.count, options: state.options };
-  });
-  expect(requestState).toEqual({
-    count: 1,
-    options: {
-      filters: [
-        {
-          vendorId: 0x3346,
-          productId: 0x100e,
-          classCode: 0xff,
-          subclassCode: 0x4f,
-          protocolCode: 0x01,
-        },
-      ],
-    },
-  });
-
-  await page.getByRole("button", { name: "搜索设备" }).click();
-  await expect(page.getByRole("radio", { name: new RegExp(usbDeviceId) })).toBeVisible();
-});
-
-test("cancelling USB authorization does not block network discovery", async ({
-  page,
-}) => {
-  await mockPolicyWebUsbDevices(page, []);
-  await page.route("**/api/v1/device/info", (route) => {
-    if (requestHost(route) === "192.168.42.1") return fulfillJson(route, deviceInfo);
-    return route.abort("connectionrefused");
-  });
-  await page.goto("./");
-
-  await page.getByRole("button", { name: "授权 USB 设备" }).click();
-  await expect(page.locator(".usb-authorization__error")).toHaveCount(0);
-  await page.getByRole("button", { name: "搜索设备" }).click();
-  await expect(page.getByRole("radio", { name: /OVIS Camera/ })).toBeVisible();
-});
-
-test("manually authorizes multiple USB devices before one discovery", async ({
-  page,
-}) => {
-  const deviceIds = ["OVIS-1842-MANUALAUTH0002", "OVIS-1842-MANUALAUTH0003"];
-  await mockPolicyWebUsbDevices(
-    page,
-    deviceIds.map((deviceId) => ({ deviceId, authorized: false })),
-  );
-  await page.route("**/api/v1/device/info", (route) => route.abort("connectionrefused"));
-  await page.goto("./");
-
-  await page.getByRole("button", { name: "授权 USB 设备" }).click();
-  await expect(page.getByText("已授权 1 台设备")).toBeVisible();
-  await page.getByRole("button", { name: "授权 USB 设备" }).click();
-  await expect(page.getByText("已授权 2 台设备")).toBeVisible();
-  await page.getByRole("button", { name: "搜索设备" }).click();
-  await expect(page.getByRole("radio")).toHaveCount(2);
-});
-
 test("discovers network devices when WebUSB is unavailable", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "usb", { configurable: true, value: undefined });
@@ -509,7 +439,7 @@ test("shows the initial discovery workspace", async ({ page }) => {
     /images\/aimorelogy-logo\.png$/,
   );
   await expect(page.getByRole("button", { name: "搜索设备" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "授权 USB 设备" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /授权 USB|Authorize USB/ })).toHaveCount(0);
   await expect(page.getByText("等待搜索")).toBeVisible();
   await expect(page.getByText("参数配置")).toHaveCount(0);
   await page.screenshot({ path: "/tmp/ovis-idle-desktop.png", fullPage: true });
@@ -854,7 +784,43 @@ test("diagnoses USB open, interface, and protocol failures without hiding networ
   await expect(page.getByText(/USB 设备返回了无效的配置响应/)).toBeVisible();
 });
 
-test("network discovery never opens the USB chooser", async ({ page }) => {
+test("falls back to the native USB chooser from the search action", async ({ page }) => {
+  const usbDeviceId = "OVIS-1842-USBMANUAL0000001";
+  await mockPolicyWebUsbDevices(page, [
+    { deviceId: usbDeviceId, authorized: false },
+  ]);
+  await page.route("**/api/v1/device/info", (route) => {
+    if (requestHost(route) === "192.168.42.1") return fulfillJson(route, deviceInfo);
+    return route.abort("connectionrefused");
+  });
+
+  await page.goto("./");
+  await page.getByRole("button", { name: "搜索设备" }).click();
+
+  await expect(page.getByRole("radio")).toHaveCount(2);
+  await expect(page.getByRole("radio", { name: new RegExp(usbDeviceId) })).toBeVisible();
+  const requestState = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __ovisUsbRequestState: { count: number; options: unknown };
+      }
+    ).__ovisUsbRequestState,
+  );
+  expect(requestState.count).toBe(1);
+  expect(requestState.options).toEqual({
+    filters: [
+      {
+        vendorId: 0x3346,
+        productId: 0x100e,
+        classCode: 0xff,
+        subclassCode: 0x4f,
+        protocolCode: 0x01,
+      },
+    ],
+  });
+});
+
+test("keeps network results when the native USB chooser is cancelled", async ({ page }) => {
   await mockPolicyWebUsbDevices(page, []);
   await page.route("**/api/v1/device/info", (route) => {
     if (requestHost(route) === "192.168.42.1") return fulfillJson(route, deviceInfo);
@@ -864,16 +830,44 @@ test("network discovery never opens the USB chooser", async ({ page }) => {
   await page.goto("./");
   await page.getByRole("button", { name: "搜索设备" }).click();
 
-  await expect(page.getByRole("radio")).toHaveCount(1);
-  const requestState = await page.evaluate(() =>
-    (
-      window as unknown as {
-        __ovisUsbRequestState: { count: number; options: unknown };
-      }
-    ).__ovisUsbRequestState,
+  await expect(
+    page.getByRole("radio", { name: /OVIS Camera OVIS-1842-00123456/ }),
+  ).toBeVisible();
+  await expect(page.getByText("本地网络扫描失败")).toHaveCount(0);
+  const requestCount = await page.evaluate(
+    () =>
+      (
+        window as unknown as { __ovisUsbRequestState: { count: number } }
+      ).__ovisUsbRequestState.count,
   );
-  expect(requestState.count).toBe(0);
-  expect(requestState.options).toBeNull();
+  expect(requestCount).toBe(1);
+});
+
+test("authorizes a second USB device on a repeated search", async ({ page }) => {
+  const firstDeviceId = "OVIS-1842-USBMANUAL0000002";
+  const secondDeviceId = "OVIS-1842-USBMANUAL0000003";
+  await mockPolicyWebUsbDevices(page, [
+    { deviceId: firstDeviceId, authorized: false },
+    { deviceId: secondDeviceId, authorized: false },
+  ]);
+  await page.route("**/api/v1/device/info", (route) =>
+    route.abort("connectionrefused"),
+  );
+
+  await page.goto("./");
+  await page.getByRole("button", { name: "搜索设备" }).click();
+  await expect(page.getByRole("radio", { name: new RegExp(firstDeviceId) })).toBeVisible();
+
+  await page.getByRole("button", { name: "重新搜索" }).click();
+  await expect(page.getByRole("radio")).toHaveCount(2);
+  await expect(page.getByRole("radio", { name: new RegExp(secondDeviceId) })).toBeVisible();
+  const requestCount = await page.evaluate(
+    () =>
+      (
+        window as unknown as { __ovisUsbRequestState: { count: number } }
+      ).__ovisUsbRequestState.count,
+  );
+  expect(requestCount).toBe(2);
 });
 
 test("adds and removes authorized USB devices on connect and disconnect", async ({ page }) => {
@@ -887,7 +881,7 @@ test("adds and removes authorized USB devices on connect and disconnect", async 
   await page.goto("./");
   await page.getByRole("button", { name: "搜索设备" }).click();
   await expect(
-    page.getByText("当前没有已授权的未初始化 USB 设备，请先授权 USB 访问后重新搜索。"),
+    page.getByText("未发现未初始化 USB 设备。再次搜索可授权下一台设备，或确认 OVIS 浏览器权限策略已经安装。"),
   )
     .toBeVisible();
 
@@ -911,7 +905,7 @@ test("adds and removes authorized USB devices on connect and disconnect", async 
   });
   await expect(page.getByRole("radio", { name: new RegExp(usbDeviceId) })).toHaveCount(0);
   await expect(
-    page.getByText("当前没有已授权的未初始化 USB 设备，请先授权 USB 访问后重新搜索。"),
+    page.getByText("未发现未初始化 USB 设备。再次搜索可授权下一台设备，或确认 OVIS 浏览器权限策略已经安装。"),
   )
     .toBeVisible();
 });

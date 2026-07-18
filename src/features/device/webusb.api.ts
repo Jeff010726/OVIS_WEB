@@ -336,9 +336,6 @@ export async function requestOvisUsbDevice(): Promise<OvisUsbDevice> {
   }
 }
 
-export const isUsbAuthorizationCancelled = (error: unknown) =>
-  error instanceof DOMException && error.name === "NotFoundError";
-
 export async function getAuthorizedOvisUsbDevices(): Promise<OvisUsbDevice[]> {
   return (await discoverAuthorizedOvisUsbDevices()).devices;
 }
