@@ -47,6 +47,7 @@ import type {
   ModelDetail,
   ModelImporter,
   ModelList,
+  ModelSizeConstraints,
   ModelSummary,
   ModelTask,
   ModelTaskType,
@@ -176,10 +177,37 @@ const deploymentDraftFromState = (
     const schema = state.parameterSchema as Record<string, RuntimeJsonSchema>;
     const constraints =
       state.processingSizeConstraints ?? schema.processingSize?.constraints;
-    const initial = constraints?.presets[0];
+    const initial = constraints?.presets?.[0];
     if (initial) draft.processingSize = { ...initial };
   }
   return draft;
+};
+
+const normalizeModelSizeConstraints = (
+  value: ModelSizeConstraints | undefined,
+): Required<ModelSizeConstraints> | null => {
+  if (
+    !value ||
+    !Number.isFinite(value.minWidth) ||
+    !Number.isFinite(value.maxWidth) ||
+    !Number.isFinite(value.minHeight) ||
+    !Number.isFinite(value.maxHeight) ||
+    !Number.isFinite(value.widthStep) ||
+    !Number.isFinite(value.heightStep) ||
+    (value.widthStep ?? 0) <= 0 ||
+    (value.heightStep ?? 0) <= 0
+  ) {
+    return null;
+  }
+  return {
+    minWidth: value.minWidth!,
+    maxWidth: value.maxWidth!,
+    minHeight: value.minHeight!,
+    maxHeight: value.maxHeight!,
+    widthStep: value.widthStep!,
+    heightStep: value.heightStep!,
+    presets: Array.isArray(value.presets) ? value.presets : [],
+  };
 };
 
 const taskIcon = (task: ModelTaskType) => {
@@ -903,10 +931,11 @@ function ModelDeploymentView({ model, importer, deployment, draft, task, busy, o
     importerDeploymentSchema?.properties?.processingSize ??
     ((importerDeploymentSchema as Record<string, RuntimeJsonSchema> | undefined)
       ?.processingSize ?? {});
-  const processingConstraints =
+  const processingConstraints = normalizeModelSizeConstraints(
     deployment.processingSizeConstraints ??
-    processingSchema.constraints ??
-    importerProcessingSchema.constraints;
+      processingSchema.constraints ??
+      importerProcessingSchema.constraints,
+  );
   const dirty = JSON.stringify(draft) !== JSON.stringify(deployment.parameters);
   return <div className="model-deployment-view"><header><Activity size={20} /><span><strong>{model.name}</strong><small>{t("models.deploymentDetail")}</small></span><output data-active={deployment.active}>{deployment.active ? t("models.active") : t("models.inactive")}</output></header><label className="model-deployment-field"><span>{t("models.threshold")}</span><input type="range" min={threshold.minimum ?? 0} max={threshold.maximum ?? 1} step={threshold.step ?? 0.01} value={draft.threshold} disabled={busy} onChange={(event) => onDraft({ ...draft, threshold: Number(event.target.value) })} /><input type="number" min={threshold.minimum ?? 0} max={threshold.maximum ?? 1} step={threshold.step ?? 0.01} value={draft.threshold} disabled={busy} onChange={(event) => onDraft({ ...draft, threshold: Number(event.target.value) })} /></label>{processingConstraints && draft.processingSize && <div className="model-deployment-size"><span>{t("models.processingSize")}</span><select value={processingConstraints.presets.some((preset) => preset.width === draft.processingSize?.width && preset.height === draft.processingSize?.height) ? `${draft.processingSize.width}x${draft.processingSize.height}` : "custom"} disabled={busy} onChange={(event) => { if (event.target.value === "custom") return; const [width, height] = event.target.value.split("x").map(Number); onDraft({ ...draft, processingSize: { width, height } }); }}>{processingConstraints.presets.map((preset) => <option key={`${preset.width}x${preset.height}`} value={`${preset.width}x${preset.height}`}>{preset.width} × {preset.height}</option>)}<option value="custom">{t("config.processingSize.custom")}</option></select><input aria-label={t("config.processingSize.width")} type="number" min={processingConstraints.minWidth} max={processingConstraints.maxWidth} step={processingConstraints.widthStep} value={draft.processingSize.width} disabled={busy} onChange={(event) => onDraft({ ...draft, processingSize: { ...draft.processingSize!, width: Number(event.target.value) } })} /><span>×</span><input aria-label={t("config.processingSize.height")} type="number" min={processingConstraints.minHeight} max={processingConstraints.maxHeight} step={processingConstraints.heightStep} value={draft.processingSize.height} disabled={busy} onChange={(event) => onDraft({ ...draft, processingSize: { ...draft.processingSize!, height: Number(event.target.value) } })} /></div>}<dl><div><dt>{t("models.tensorSize")}</dt><dd>{model.tensorSize ? `${model.tensorSize.width} × ${model.tensorSize.height}` : t("models.unknown")}</dd></div><div><dt>{t("models.savedParameters")}</dt><dd>{JSON.stringify(deployment.parameters)}</dd></div><div><dt>{t("models.appliedParameters")}</dt><dd>{deployment.appliedParameters ? JSON.stringify(deployment.appliedParameters) : "-"}</dd></div></dl>{task && <div className="model-task-progress"><span><span style={{ width: `${task.progress}%` }} /></span><output>{task.message} · {task.progress}%</output></div>}<footer><button className="button button--secondary" type="button" disabled={!dirty || busy} onClick={onSave}><Save size={14} />{t("models.saveDeployment")}</button>{deployment.active ? <button className="button button--ghost" type="button" disabled={busy} onClick={onDeactivate}><Pause size={14} />{t("models.deactivate")}</button> : <button className="button button--primary" type="button" disabled={busy || dirty} onClick={onActivate}><Play size={14} />{t("models.activate")}</button>}</footer></div>;
 }

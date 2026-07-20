@@ -2460,6 +2460,16 @@ a:focus-visible {
   font-size: 10px;
 }
 
+.processing-size-editor--readonly {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.processing-size-editor--readonly output {
+  color: var(--muted-light);
+  font: 10px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .processing-size-editor label {
   min-width: 0;
   display: flex;

@@ -252,8 +252,29 @@ function ProcessingSizeEditor({
   onChange,
 }: ProcessingSizeEditorProps) {
   const { t } = useTranslation();
-  const { constraints } = capability;
-  const presetValue = constraints.presets.some(
+  const constraints = capability.constraints;
+  const hasEditableConstraints =
+    constraints !== undefined &&
+    Number.isFinite(constraints.minWidth) &&
+    Number.isFinite(constraints.maxWidth) &&
+    Number.isFinite(constraints.minHeight) &&
+    Number.isFinite(constraints.maxHeight) &&
+    Number.isFinite(constraints.widthStep) &&
+    Number.isFinite(constraints.heightStep) &&
+    (constraints.widthStep ?? 0) > 0 &&
+    (constraints.heightStep ?? 0) > 0;
+  if (!constraints || !hasEditableConstraints) {
+    return (
+      <div className="processing-size-editor processing-size-editor--readonly">
+        <span>{label}</span>
+        <output>{value.width} × {value.height}</output>
+      </div>
+    );
+  }
+  const presets = Array.isArray(constraints.presets)
+    ? constraints.presets
+    : [];
+  const presetValue = presets.some(
     (preset) => preset.width === value.width && preset.height === value.height,
   )
     ? `${value.width}x${value.height}`
@@ -271,7 +292,7 @@ function ProcessingSizeEditor({
           onChange({ width, height });
         }}
       >
-        {constraints.presets.map((preset) => (
+        {presets.map((preset) => (
           <option
             key={`${preset.width}x${preset.height}`}
             value={`${preset.width}x${preset.height}`}

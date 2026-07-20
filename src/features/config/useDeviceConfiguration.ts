@@ -178,17 +178,29 @@ const validateProcessingSize = (
   capability: ProcessingSizeCapability | undefined,
   errors: ConfigIssue[],
 ) => {
-  if (!capability || !value) return;
+  if (!capability || !value || !capability.constraints) return;
   const { constraints } = capability;
+  if (
+    !Number.isFinite(constraints.minWidth) ||
+    !Number.isFinite(constraints.maxWidth) ||
+    !Number.isFinite(constraints.minHeight) ||
+    !Number.isFinite(constraints.maxHeight) ||
+    !Number.isFinite(constraints.widthStep) ||
+    !Number.isFinite(constraints.heightStep) ||
+    (constraints.widthStep ?? 0) <= 0 ||
+    (constraints.heightStep ?? 0) <= 0
+  ) {
+    return;
+  }
   const valid =
     Number.isInteger(value.width) &&
     Number.isInteger(value.height) &&
-    value.width >= constraints.minWidth &&
-    value.width <= constraints.maxWidth &&
-    value.height >= constraints.minHeight &&
-    value.height <= constraints.maxHeight &&
-    (value.width - constraints.minWidth) % constraints.widthStep === 0 &&
-    (value.height - constraints.minHeight) % constraints.heightStep === 0;
+    value.width >= constraints.minWidth! &&
+    value.width <= constraints.maxWidth! &&
+    value.height >= constraints.minHeight! &&
+    value.height <= constraints.maxHeight! &&
+    (value.width - constraints.minWidth!) % constraints.widthStep! === 0 &&
+    (value.height - constraints.minHeight!) % constraints.heightStep! === 0;
   if (!valid) {
     errors.push({
       field,

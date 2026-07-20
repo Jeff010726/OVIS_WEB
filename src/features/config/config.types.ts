@@ -25,17 +25,17 @@ export interface ProcessingSize {
 }
 
 export interface ProcessingSizeConstraints {
-  minWidth: number;
-  maxWidth: number;
-  minHeight: number;
-  maxHeight: number;
-  widthStep: number;
-  heightStep: number;
-  presets: ProcessingSize[];
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+  widthStep?: number;
+  heightStep?: number;
+  presets?: ProcessingSize[];
 }
 
 export interface ProcessingSizeCapability extends ProcessingSize {
-  constraints: ProcessingSizeConstraints;
+  constraints?: ProcessingSizeConstraints;
 }
 
 export interface AiFeatureCapability {

@@ -20,13 +20,13 @@ export interface ModelSize {
 }
 
 export interface ModelSizeConstraints {
-  minWidth: number;
-  maxWidth: number;
-  minHeight: number;
-  maxHeight: number;
-  widthStep: number;
-  heightStep: number;
-  presets: ModelSize[];
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+  widthStep?: number;
+  heightStep?: number;
+  presets?: ModelSize[];
 }
 
 export interface DeploymentParameters {

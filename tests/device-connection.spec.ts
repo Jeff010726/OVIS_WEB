@@ -1531,6 +1531,42 @@ test("renders AI capabilities and keeps TPU features mutually exclusive", async 
   await expect(page.getByText("有未应用的修改")).toBeVisible();
 });
 
+test("keeps AI configuration usable when processing-size constraints are absent", async ({
+  page,
+}) => {
+  const capabilitiesWithoutConstraints = structuredClone(configCapabilities);
+  const personCapability = capabilitiesWithoutConstraints.ai.features.find(
+    (feature) => feature.id === "person",
+  );
+  if (personCapability) {
+    personCapability.processing_size = { width: 448, height: 256 } as typeof personCapability.processing_size;
+  }
+  await page.route("**/api/v1/config/capabilities", (route) =>
+    fulfillJson(route, capabilitiesWithoutConstraints),
+  );
+  await page.route("**/api/v1/models/importers", (route) =>
+    fulfillJson(route, modelImporterCatalog),
+  );
+  await page.route("**/api/v1/models", (route) =>
+    fulfillJson(route, {
+      models: [],
+      storage: { totalBytes: 0, availableBytes: 0, reservedBytes: 2_097_152 },
+    }),
+  );
+  await page.route("**/api/v1/config", (route) =>
+    fulfillJson(route, currentConfig),
+  );
+  await discoverSingleDevice(page);
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+
+  await expect(page.getByRole("switch", { name: "启用目标检测" })).toBeVisible();
+  await expect(page.locator(".processing-size-editor--readonly")).toContainText(
+    "448 × 256",
+  );
+  await expect(page.locator(".configuration-page")).toBeVisible();
+});
+
 test("renders output capabilities and disables only RTSP-dependent controls", async ({
   page,
 }) => {
