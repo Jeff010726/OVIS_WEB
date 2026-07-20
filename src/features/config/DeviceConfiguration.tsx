@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   Activity,
   AlertTriangle,
+  Boxes,
   CheckCircle2,
   ImageOff,
   LoaderCircle,
@@ -36,6 +37,7 @@ import type {
   VideoProfileCapability,
 } from "./config.types";
 import { useDeviceConfiguration } from "./useDeviceConfiguration";
+import { ModelManager } from "../models/ModelManager";
 
 interface DeviceConfigurationProps {
   device: OvisDeviceInfo;
@@ -399,7 +401,7 @@ const TPU_FEATURE_IDS: TpuFeatureId[] = [
 const isTpuFeatureId = (value: string): value is TpuFeatureId =>
   TPU_FEATURE_IDS.includes(value as TpuFeatureId);
 
-type ConfigSectionId = "video" | "outputs" | "detection";
+type ConfigSectionId = "video" | "outputs" | "detection" | "models";
 
 interface ConfigSection {
   id: ConfigSectionId;
@@ -407,7 +409,8 @@ interface ConfigSection {
   labelKey:
     | "config.sections.video"
     | "config.sections.outputs"
-    | "config.sections.detection";
+    | "config.sections.detection"
+    | "config.sections.models";
 }
 
 export function DeviceConfiguration({
@@ -439,6 +442,7 @@ export function DeviceConfiguration({
     video: null,
     outputs: null,
     detection: null,
+    models: null,
   });
   const productImage = getDeviceImage(device.model);
   const issues = configuration.validation?.errors ?? [];
@@ -459,6 +463,7 @@ export function DeviceConfiguration({
         ? [{ id: "outputs" as const, labelKey: "config.sections.outputs" as const }]
         : []),
       { id: "detection", labelKey: "config.sections.detection" },
+      { id: "models", labelKey: "config.sections.models" },
     ];
     return sectionIds.map((section, index) => ({
       ...section,
@@ -1171,6 +1176,27 @@ export function DeviceConfiguration({
                         />
                       )}
                     </div>
+                  </section>
+
+                  <section
+                    className="config-section config-section--models"
+                    aria-labelledby="models-config-heading"
+                    ref={(element) => {
+                      sectionRefs.current.models = element;
+                    }}
+                  >
+                    <div className="config-section__heading">
+                      <Boxes size={18} />
+                      <div>
+                        <span>{sectionIndex("models")}</span>
+                        <h3 id="models-config-heading">{t("config.sections.models")}</h3>
+                      </div>
+                    </div>
+                    <ModelManager
+                      apiBaseUrl={selectedDevice.apiBaseUrl}
+                      deviceId={device.device_id}
+                      disabled={isBusy}
+                    />
                   </section>
                 </fieldset>
 

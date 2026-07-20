@@ -188,11 +188,62 @@ const currentConfig = {
   },
 };
 
+const modelImporterCatalog = {
+  upload: {
+    strategy: "single-request",
+    contentType: "application/octet-stream",
+    contentLengthRequired: true,
+    contentLengthSource: "body",
+    contentRange: false,
+    resumable: false,
+    retryOffset: 0,
+    progressSource: "client",
+  },
+  availableBytes: 52_428_800,
+  importers: [
+    {
+      id: "detection.yolov8",
+      schemaVersion: 1,
+      name: "YOLOv8 目标检测",
+      task: "object_detection",
+      enabled: true,
+      deployable: true,
+      maxFileSize: 16_777_216,
+      runtimeConsumers: ["ipcamera.person_detection"],
+      metadataSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["labels"],
+        properties: {
+          labels: {
+            type: "array",
+            minItems: 1,
+            maxItems: 256,
+            uniqueItems: true,
+            items: { type: "string", minLength: 1, maxLength: 96 },
+          },
+        },
+      },
+      deploymentSchema: {
+        type: "object",
+        required: ["threshold"],
+        properties: {
+          threshold: { type: "number", minimum: 0, maximum: 1, default: 0.5 },
+        },
+      },
+      defaults: null,
+      constraints: {
+        properties: { labels: { maxItems: 80 } },
+      },
+    },
+  ],
+};
+
 const requestHost = (route: Route) => new URL(route.request().url()).hostname;
 
-const fulfillJson = (route: Route, body: unknown) =>
+const fulfillJson = (route: Route, body: unknown, status = 200) =>
   route.fulfill({
-    status: 200,
+    status,
     contentType: "application/json",
     body: JSON.stringify(body),
   });
@@ -411,6 +462,9 @@ async function discoverSingleDevice(
 }
 
 async function mockConfigurationRead(page: Page) {
+  await page.route("**/api/v1/models/importers", (route) =>
+    fulfillJson(route, modelImporterCatalog),
+  );
   await page.route("**/api/v1/config/capabilities", (route) =>
     fulfillJson(route, configCapabilities),
   );
@@ -1208,6 +1262,122 @@ test("selects, confirms, connects, and disconnects locally", async ({ page }) =>
   await page.getByTitle("断开连接").click();
   await expect(page.getByText("发现 1 台 OVIS 设备")).toBeVisible();
   await expect(page.getByText("搜索完成")).toBeVisible();
+});
+
+test("imports a model with authenticated full-file upload and CSRF writes", async ({
+  page,
+}) => {
+  await mockConfigurationRead(page);
+  const importId = "018f1234abcd5678";
+  const file = Buffer.from("BMOVIS\u0000test-model");
+  const createdAt = 1_784_505_600;
+  const expectedAuthorization = "Basic YWRtaW46c2VjcmV0";
+  const emptyModelList = {
+    models: [],
+    storage: {
+      totalBytes: 67_108_864,
+      availableBytes: 52_428_800,
+      reservedBytes: 2_097_152,
+    },
+  };
+  const importTask = {
+    id: importId,
+    status: "created",
+    importerId: "detection.yolov8",
+    schemaVersion: 1,
+    name: "安全帽检测",
+    fileSize: file.length,
+    uploadedBytes: 0,
+    createdAt,
+    metadata: { labels: ["person", "helmet"] },
+  };
+  const modelDetail = {
+    id: importId,
+    status: "ready",
+    importerId: "detection.yolov8",
+    schemaVersion: 1,
+    name: "安全帽检测",
+    fileSize: file.length,
+    uploadedBytes: file.length,
+    createdAt,
+    committedAt: createdAt + 5,
+    checksum: "0123456789abcdef",
+    metadata: { labels: ["person", "helmet"] },
+    modelType: "YOLOV8",
+    task: "object_detection",
+    deployable: true,
+    deployment: { threshold: 0.5 },
+    active: false,
+    referenced: false,
+  };
+
+  await page.route("**/api/v1/models", async (route) => {
+    expect(route.request().headers().authorization).toBe(expectedAuthorization);
+    return fulfillJson(route, emptyModelList);
+  });
+  await page.route("**/api/v1/models/imports", async (route) => {
+    const request = route.request();
+    expect(request.method()).toBe("POST");
+    expect(request.headers().authorization).toBe(expectedAuthorization);
+    expect(request.headers()["x-ovis-csrf"]).toBe("1");
+    expect(request.postDataJSON()).toEqual({
+      importerId: "detection.yolov8",
+      schemaVersion: 1,
+      name: "安全帽检测",
+      fileSize: file.length,
+      metadata: { labels: ["person", "helmet"] },
+    });
+    return fulfillJson(route, importTask, 201);
+  });
+  await page.route(`**/api/v1/models/imports/${importId}/content`, async (route) => {
+    const request = route.request();
+    expect(request.method()).toBe("PUT");
+    expect(request.headers().authorization).toBe(expectedAuthorization);
+    expect(request.headers()["x-ovis-csrf"]).toBe("1");
+    expect(request.headers()["content-type"]).toBe("application/octet-stream");
+    expect(request.headers()["content-range"]).toBeUndefined();
+    expect(request.headers()["transfer-encoding"]).toBeUndefined();
+    expect(request.postDataBuffer()).toEqual(file);
+    return fulfillJson(route, {
+      ...importTask,
+      status: "uploaded",
+      uploadedBytes: file.length,
+    });
+  });
+  await page.route(`**/api/v1/models/imports/${importId}/commit`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().headers().authorization).toBe(expectedAuthorization);
+    expect(route.request().headers()["x-ovis-csrf"]).toBe("1");
+    return fulfillJson(route, modelDetail);
+  });
+
+  await discoverSingleDevice(page);
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+  await page.getByRole("button", { name: /模型管理/ }).click();
+  await page.getByLabel("用户名").fill("admin");
+  await page.getByLabel("密码").fill("secret");
+  await page.getByRole("button", { name: "进入模型管理" }).click();
+  await page.getByRole("button", { name: "新增模型" }).click();
+  await page.getByRole("button", { name: /目标检测/ }).click();
+  await page.getByRole("button", { name: /YOLOv8 目标检测/ }).click();
+  await page.getByLabel("模型名称").fill("安全帽检测");
+  await page.getByLabel("有序类别列表 1").fill("person");
+  await page.getByRole("button", { name: "添加一项" }).click();
+  await page.getByLabel("有序类别列表 2").fill("helmet");
+  await page.getByLabel("BModel 文件").setInputFiles({
+    name: "helmet.bmodel",
+    mimeType: "application/octet-stream",
+    buffer: file,
+  });
+  await page.getByRole("button", { name: "创建任务并上传" }).click();
+
+  await expect(page.getByRole("heading", { name: "安全帽检测" })).toBeVisible();
+  await expect(page.getByText("detection.yolov8").last()).toBeVisible();
+  const storedImportIds = await page.evaluate((key) => localStorage.getItem(key),
+    `ovis_model_import_ids:${deviceInfo.device_id}`,
+  );
+  expect(storedImportIds).toBeNull();
 });
 
 test("probes the last successful device address first on the next scan", async ({
