@@ -325,6 +325,7 @@ export const resources = {
           bitrate: "Bitrate",
         },
         outputs: {
+          mode: "Video output mode",
           rtsp: "RTSP output",
           uvc: "UVC USB camera",
           enableRtsp: "Enable RTSP output",
@@ -395,6 +396,7 @@ export const resources = {
           unsupportedFps: "The selected preset does not support this frame rate",
           invalidBitrate: "Bitrate must be a positive integer",
           invalidProcessingSize: "The processing resolution does not satisfy the device limits or alignment step",
+          invalidOutputMode: "Select exactly one video output mode: UVC or RTSP",
           bitrateRange: "Bitrate must be between {{min}} and {{max}} Kbps",
           thresholdRange: "Threshold must be between 0 and 1",
           sensitivityRange: "Sensitivity must be between 0 and 100",
@@ -777,7 +779,7 @@ export const resources = {
         networkResetFailed: "设备未确认 IP 地址重置，浏览器仍保留当前网段记录。",
         sections: { video: "视频码流", outputs: "输出服务", detection: "智能检测", detectionFull: "画面与智能检测", models: "模型管理" },
         stream: { main: "主码流", sub: "子码流", enableSub: "启用子码流", resolution: "分辨率预设", frameRate: "帧率", bitrate: "码率" },
-        outputs: { rtsp: "RTSP 输出", uvc: "UVC USB 摄像头", enableRtsp: "启用 RTSP 输出", enableUvc: "启用 UVC USB 摄像头" },
+        outputs: { mode: "视频输出模式", rtsp: "RTSP 输出", uvc: "UVC USB 摄像头", enableRtsp: "启用 RTSP 输出", enableUvc: "启用 UVC USB 摄像头" },
         overlay: { title: "OSD 叠加", enable: "启用 OSD" },
         detection: {
           person: "目标检测", objectDetection: "目标检测", builtinPerson: "内置人员检测", model: "模型", face: "人脸检测", humanPose: "人体姿态", objectTracking: "目标检测与跟踪",
@@ -803,6 +805,7 @@ export const resources = {
           unsupportedFps: "当前预设不支持此帧率",
           invalidBitrate: "码率必须为正整数",
           invalidProcessingSize: "处理分辨率不符合设备范围或对齐步长要求",
+          invalidOutputMode: "视频输出模式必须且只能选择 UVC 或 RTSP 其中一种",
           bitrateRange: "码率范围为 {{min}}-{{max}} Kbps",
           thresholdRange: "阈值必须在 0 到 1 之间",
           sensitivityRange: "灵敏度必须在 0 到 100 之间",

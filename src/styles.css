@@ -2321,6 +2321,62 @@ a:focus-visible {
   border-top: 1px solid var(--line-soft);
 }
 
+.output-mode-panel {
+  min-height: 92px;
+  padding: 16px 2px;
+  display: grid;
+  grid-template-columns: minmax(150px, 0.45fr) minmax(320px, 1fr);
+  align-items: center;
+  gap: 24px;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.output-mode-panel > span {
+  color: var(--muted-light);
+  font-size: 11px;
+  font-weight: 580;
+}
+
+.output-mode-control {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--line);
+}
+
+.output-mode-control button {
+  min-height: 48px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: #0b0b0b;
+  cursor: pointer;
+}
+
+.output-mode-control button:last-child {
+  border-right: 0;
+}
+
+.output-mode-control button:only-child {
+  grid-column: 1 / -1;
+}
+
+.output-mode-control button[aria-checked="true"] {
+  color: #0a0a0a;
+  background: #ededed;
+}
+
+.output-mode-control button:focus-visible {
+  outline: 1px solid #fff;
+  outline-offset: -3px;
+}
+
 .detection-runtime-summary {
   min-height: 58px;
   padding: 12px 2px;
@@ -4501,6 +4557,11 @@ a:focus-visible {
   .feature-row__range {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+
+  .output-mode-panel {
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .detection-runtime-summary,

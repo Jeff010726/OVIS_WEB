@@ -178,7 +178,7 @@ const currentConfig = {
   revision: "a81f36c2",
   values: {
     outputs: {
-      rtsp: { enabled: true },
+      rtsp: { enabled: false },
       uvc: { enabled: true },
     },
     video: {
@@ -1671,16 +1671,26 @@ test("renders output capabilities and disables only RTSP-dependent controls", as
   await page.getByRole("radio").click();
   await page.getByRole("button", { name: "连接", exact: true }).click();
 
-  const rtsp = page.getByRole("switch", { name: "启用 RTSP 输出" });
-  const uvc = page.getByRole("switch", { name: "启用 UVC USB 摄像头" });
+  const rtsp = page.getByRole("radio", { name: "RTSP 输出" });
+  const uvc = page.getByRole("radio", { name: "UVC USB 摄像头" });
   const subEnabled = page.getByRole("switch", { name: "启用子码流" });
   const mainStream = page.getByRole("region", { name: "主码流" });
   const subStream = page.getByRole("region", { name: "子码流" });
 
-  await expect(rtsp).toBeChecked();
   await expect(uvc).toBeChecked();
-  await rtsp.click();
+  await expect(rtsp).not.toBeChecked();
+  await expect(mainStream.getByRole("combobox", { name: "帧率" })).toBeEnabled();
+  await expect(mainStream.getByRole("spinbutton", { name: "码率" })).toBeDisabled();
+  await expect(subEnabled).toBeDisabled();
 
+  await rtsp.click();
+  await expect(rtsp).toBeChecked();
+  await expect(uvc).not.toBeChecked();
+  await expect(mainStream.getByRole("spinbutton", { name: "码率" })).toBeEnabled();
+  await expect(subEnabled).toBeEnabled();
+
+  await uvc.click();
+  await expect(uvc).toBeChecked();
   await expect(rtsp).not.toBeChecked();
   await expect(mainStream.getByRole("combobox", { name: "帧率" })).toBeEnabled();
   await expect(mainStream.getByRole("spinbutton", { name: "码率" })).toBeDisabled();
@@ -1689,10 +1699,44 @@ test("renders output capabilities and disables only RTSP-dependent controls", as
   await expect(subEnabled).toBeChecked();
   await expect(subStream.getByRole("combobox", { name: "帧率" })).toBeDisabled();
   await expect(subStream.getByRole("spinbutton", { name: "码率" })).toBeDisabled();
-  await expect(uvc).toBeEnabled();
   await uvc.click();
-  await expect(uvc).not.toBeChecked();
+  await expect(uvc).toBeChecked();
+  await expect(rtsp).not.toBeChecked();
+});
+
+test("normalizes legacy invalid output states to UVC without auto-saving", async ({
+  page,
+}) => {
+  const legacyConfig = structuredClone(currentConfig);
+  legacyConfig.values.outputs.rtsp.enabled = true;
+  legacyConfig.values.outputs.uvc.enabled = true;
+  let putRequests = 0;
+  await page.route("**/api/v1/config/capabilities", (route) =>
+    fulfillJson(route, configCapabilities),
+  );
+  await page.route("**/api/v1/config", (route) => {
+    if (route.request().method() === "PUT") putRequests += 1;
+    return fulfillJson(route, legacyConfig);
+  });
+  await page.route("**/api/v1/models/importers", (route) =>
+    fulfillJson(route, modelImporterCatalog),
+  );
+  await page.route("**/api/v1/models", (route) =>
+    fulfillJson(route, {
+      models: [],
+      storage: { totalBytes: 0, availableBytes: 0, reservedBytes: 0 },
+    }),
+  );
+  await discoverSingleDevice(page);
+  await page.getByRole("radio").first().click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+
+  await expect(
+    page.getByRole("radio", { name: "UVC USB 摄像头" }),
+  ).toBeChecked();
+  await expect(page.getByRole("radio", { name: "RTSP 输出" })).not.toBeChecked();
   await expect(page.getByText("有未应用的修改")).toBeVisible();
+  expect(putRequests).toBe(0);
 });
 
 test("hides output switches omitted by device capabilities", async ({ page }) => {
@@ -1709,8 +1753,8 @@ test("hides output switches omitted by device capabilities", async ({ page }) =>
   await page.getByRole("radio").click();
   await page.getByRole("button", { name: "连接", exact: true }).click();
 
-  await expect(page.getByRole("switch", { name: "启用 RTSP 输出" })).toHaveCount(0);
-  await expect(page.getByRole("switch", { name: "启用 UVC USB 摄像头" })).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: "RTSP 输出" })).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: "UVC USB 摄像头" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /输出服务/ })).toHaveCount(0);
 });
 
@@ -1874,6 +1918,7 @@ test("edits, validates, saves, applies, and polls configuration", async ({
   let savePayload: Record<string, unknown> | null = null;
   let applyPayload: Record<string, unknown> | null = null;
   let taskRequests = 0;
+  let putRequests = 0;
   let applyStarted = false;
   let reconnectRequests = 0;
 
@@ -1912,6 +1957,7 @@ test("edits, validates, saves, applies, and polls configuration", async ({
   });
   await page.route("**/api/v1/config", async (route) => {
     if (route.request().method() === "PUT") {
+      putRequests += 1;
       savePayload = await route.request().postDataJSON();
       savedValues = structuredClone(
         (savePayload as { values: typeof currentConfig.values }).values,
@@ -1948,12 +1994,13 @@ test("edits, validates, saves, applies, and polls configuration", async ({
 
   await mainFps.selectOption("60");
   await page.getByRole("switch", { name: "启用 OSD" }).click();
-  const rtspSwitch = page.getByRole("switch", { name: "启用 RTSP 输出" });
-  const uvcSwitch = page.getByRole("switch", { name: "启用 UVC USB 摄像头" });
-  await expect(rtspSwitch).toBeChecked();
-  await expect(uvcSwitch).toBeChecked();
-  await rtspSwitch.click();
-  await uvcSwitch.click();
+  const rtspMode = page.getByRole("radio", { name: "RTSP 输出" });
+  const uvcMode = page.getByRole("radio", { name: "UVC USB 摄像头" });
+  await expect(uvcMode).toBeChecked();
+  await expect(rtspMode).not.toBeChecked();
+  await rtspMode.click();
+  await expect(rtspMode).toBeChecked();
+  await expect(uvcMode).not.toBeChecked();
   await expect(page.getByText("有未应用的修改")).toBeVisible();
   const saveButton = page.getByRole("button", { name: "应用配置" });
   await expect(saveButton).toBeEnabled();
@@ -1968,7 +2015,7 @@ test("edits, validates, saves, applies, and polls configuration", async ({
   );
   await expect(applyConfirmation).toContainText("UVC 变更会短暂中断 USB 连接");
   expect(savePayload).toBeNull();
-  await expect(uvcSwitch).toBeDisabled();
+  await expect(uvcMode).toBeDisabled();
   await applyConfirmation.getByRole("button", { name: "确认并应用" }).click();
 
   await expect(page.getByText("配置已保存，视频服务正在重启").first()).toBeVisible();
@@ -1988,14 +2035,16 @@ test("edits, validates, saves, applies, and polls configuration", async ({
   await expect(page.getByText("设备正在重新连接")).toBeVisible();
   await expect(page.getByText("设备重启中").first()).toBeVisible();
   await expect(page.getByText("等待设备确认")).toBeVisible();
+  await expect(page.getByText("无法访问所选设备")).toHaveCount(0);
   await page.screenshot({
     path: "/tmp/ovis-config-reconnecting-desktop.png",
     fullPage: true,
   });
   await expect(page.getByText("配置已应用")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("配置已同步")).toBeVisible();
-  await expect(rtspSwitch).not.toBeChecked();
-  await expect(uvcSwitch).not.toBeChecked();
+  await expect(rtspMode).toBeChecked();
+  await expect(uvcMode).not.toBeChecked();
+  expect(putRequests).toBe(1);
   expect(taskRequests).toBe(2);
   expect(reconnectRequests).toBe(3);
   expect(
@@ -2015,7 +2064,7 @@ test("edits, validates, saves, applies, and polls configuration", async ({
       },
       overlay: { enabled: false },
       outputs: {
-        rtsp: { enabled: false },
+        rtsp: { enabled: true },
         uvc: { enabled: false },
       },
       detection: {

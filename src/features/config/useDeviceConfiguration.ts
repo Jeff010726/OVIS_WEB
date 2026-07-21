@@ -45,6 +45,26 @@ const MAX_RESET_TASK_POLLS = 60;
 
 const cloneValues = (values: DeviceConfigValues) => structuredClone(values);
 
+const normalizeOutputMode = (
+  values: DeviceConfigValues,
+): DeviceConfigValues => {
+  const normalized = cloneValues(values);
+  const rawOutputs = (values as {
+    outputs?: {
+      rtsp?: { enabled?: unknown };
+      uvc?: { enabled?: unknown };
+    };
+  }).outputs;
+  const rtspEnabled = rawOutputs?.rtsp?.enabled === true;
+  const uvcEnabled = rawOutputs?.uvc?.enabled === true;
+  const useRtsp = rtspEnabled && !uvcEnabled;
+  normalized.outputs = {
+    rtsp: { enabled: useRtsp },
+    uvc: { enabled: !useRtsp },
+  };
+  return normalized;
+};
+
 const serializeConfigValues = (
   values: DeviceConfigValues,
 ): DeviceConfigValues => {
@@ -89,16 +109,11 @@ const serializeConfigValues = (
     },
   };
 
-  if (values.outputs) {
-    serialized.outputs = {
-      rtsp: {
-        enabled: values.outputs.rtsp.enabled,
-      },
-      uvc: {
-        enabled: values.outputs.uvc.enabled,
-      },
-    };
-  }
+  const outputValues = normalizeOutputMode(values).outputs!;
+  serialized.outputs = {
+    rtsp: { enabled: outputValues.rtsp.enabled },
+    uvc: { enabled: outputValues.uvc.enabled },
+  };
 
   if (values.detection.human_pose) {
     serialized.detection.human_pose = {
@@ -259,6 +274,20 @@ function validateDraftLocally(
   values: DeviceConfigValues,
 ): ConfigIssue[] {
   const errors: ConfigIssue[] = [];
+
+  const uvcEnabled = values.outputs?.uvc.enabled;
+  const rtspOutputEnabled = values.outputs?.rtsp.enabled;
+  if (
+    typeof uvcEnabled !== "boolean" ||
+    typeof rtspOutputEnabled !== "boolean" ||
+    uvcEnabled === rtspOutputEnabled
+  ) {
+    errors.push({
+      field: "outputs",
+      code: "INVALID_OUTPUT_MODE",
+      message: i18n.t("config.validation.invalidOutputMode"),
+    });
+  }
 
   const validateStream = (
     field: "video.main" | "video.sub",
@@ -521,7 +550,7 @@ export function useDeviceConfiguration({
   const assignDocument = useCallback((document: DeviceConfigDocument) => {
     setRevision(document.revision);
     setOriginal(cloneValues(document.values));
-    setDraft(cloneValues(document.values));
+    setDraft(normalizeOutputMode(document.values));
   }, []);
 
   const load = useCallback(async (overrideApiBaseUrl?: string) => {

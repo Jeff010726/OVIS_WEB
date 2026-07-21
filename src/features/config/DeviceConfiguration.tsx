@@ -669,6 +669,7 @@ export function DeviceConfiguration({
   const rtspEnabled =
     outputCapabilities?.rtsp.supported !== true ||
     outputValues?.rtsp.enabled === true;
+  const outputMode = outputValues?.rtsp.enabled === true ? "rtsp" : "uvc";
   const motionCapability = configuration.capabilities?.ai?.motion_detection;
   const motionFeatureCapability = configuration.capabilities?.ai?.features.find(
     (feature) => feature.id === "motion",
@@ -1253,63 +1254,50 @@ export function DeviceConfiguration({
                           </h3>
                         </div>
                       </div>
-                      <div className="feature-list">
-                        {outputCapabilities?.rtsp.supported && (
-                          <div className="feature-row feature-row--simple">
-                            <div className="feature-row__identity">
-                              <span aria-hidden="true">
-                                <RadioTower size={17} />
-                              </span>
-                              <div>
-                                <strong>{t("config.outputs.rtsp")}</strong>
-                                <small>
-                                  {outputValues.rtsp.enabled
-                                    ? t("common.enabled")
-                                    : t("common.disabled")}
-                                </small>
-                              </div>
-                            </div>
-                            <Toggle
-                              checked={outputValues.rtsp.enabled}
-                              label={t("config.outputs.enableRtsp")}
-                              onChange={(checked) =>
+                      <div className="output-mode-panel">
+                        <span>{t("config.outputs.mode")}</span>
+                        <div
+                          className="output-mode-control"
+                          role="radiogroup"
+                          aria-label={t("config.outputs.mode")}
+                        >
+                          {outputCapabilities?.uvc.supported && (
+                            <button
+                              type="button"
+                              role="radio"
+                              aria-checked={outputMode === "uvc"}
+                              onClick={() =>
                                 configuration.updateDraft((draft) => {
-                                  if (draft.outputs) {
-                                    draft.outputs.rtsp.enabled = checked;
-                                  }
+                                  draft.outputs = {
+                                    uvc: { enabled: true },
+                                    rtsp: { enabled: false },
+                                  };
                                 })
                               }
-                            />
-                          </div>
-                        )}
-                        {outputCapabilities?.uvc.supported && (
-                          <div className="feature-row feature-row--simple">
-                            <div className="feature-row__identity">
-                              <span aria-hidden="true">
-                                <Usb size={17} />
-                              </span>
-                              <div>
-                                <strong>{t("config.outputs.uvc")}</strong>
-                                <small>
-                                  {outputValues.uvc.enabled
-                                    ? t("common.enabled")
-                                    : t("common.disabled")}
-                                </small>
-                              </div>
-                            </div>
-                            <Toggle
-                              checked={outputValues.uvc.enabled}
-                              label={t("config.outputs.enableUvc")}
-                              onChange={(checked) =>
+                            >
+                              <Usb size={17} />
+                              <span>{t("config.outputs.uvc")}</span>
+                            </button>
+                          )}
+                          {outputCapabilities?.rtsp.supported && (
+                            <button
+                              type="button"
+                              role="radio"
+                              aria-checked={outputMode === "rtsp"}
+                              onClick={() =>
                                 configuration.updateDraft((draft) => {
-                                  if (draft.outputs) {
-                                    draft.outputs.uvc.enabled = checked;
-                                  }
+                                  draft.outputs = {
+                                    uvc: { enabled: false },
+                                    rtsp: { enabled: true },
+                                  };
                                 })
                               }
-                            />
-                          </div>
-                        )}
+                            >
+                              <RadioTower size={17} />
+                              <span>{t("config.outputs.rtsp")}</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </section>
                   )}
