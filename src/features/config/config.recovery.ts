@@ -12,6 +12,12 @@ export interface RecoveredConfigDevice {
   info: OvisDeviceInfo;
 }
 
+export interface PendingDeviceRecovery {
+  device_id: string;
+  api_base_url: string;
+  started_at: number;
+}
+
 export class ConfigReconnectTimeoutError extends Error {
   constructor() {
     super(i18n.t("config.validation.reconnectTimeout"));
@@ -36,8 +42,8 @@ const delay = (milliseconds: number, signal: AbortSignal) =>
     signal.addEventListener("abort", abort, { once: true });
   });
 
-export async function reconnectConfigDevice(
-  pending: PendingConfigApplication,
+export async function reconnectDeviceByIdentity(
+  pending: PendingDeviceRecovery,
   signal: AbortSignal,
 ): Promise<RecoveredConfigDevice> {
   const deadline = pending.started_at + CONFIG_RECONNECT_TIMEOUT_MS;
@@ -81,3 +87,8 @@ export async function reconnectConfigDevice(
   if (signal.aborted) throw new DOMException("Aborted", "AbortError");
   throw new ConfigReconnectTimeoutError();
 }
+
+export const reconnectConfigDevice = (
+  pending: PendingConfigApplication,
+  signal: AbortSignal,
+) => reconnectDeviceByIdentity(pending, signal);

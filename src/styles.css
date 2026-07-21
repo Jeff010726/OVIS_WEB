@@ -1000,6 +1000,14 @@ a:focus-visible {
   font-size: 10px;
 }
 
+.model-unapplied-status {
+  padding: 9px 14px;
+  color: #d4e89c;
+  border-bottom: 1px solid #34421d;
+  background: #10140b;
+  font-size: 10px;
+}
+
 .model-error {
   display: grid;
   place-items: center;
@@ -2311,6 +2319,53 @@ a:focus-visible {
 
 .feature-list {
   border-top: 1px solid var(--line-soft);
+}
+
+.detection-runtime-summary {
+  min-height: 58px;
+  padding: 12px 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.detection-runtime-summary span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.detection-runtime-summary strong {
+  color: #ededed;
+  font-size: 13px;
+  font-weight: 580;
+  text-align: right;
+}
+
+.builtin-detection-panel {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.builtin-detection-panel .feature-row {
+  border-bottom: 0;
+}
+
+.builtin-detection-panel__notice {
+  min-height: 46px;
+  padding: 8px 2px 12px 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: #b9b9b9;
+  border-top: 1px solid #1c1c1c;
+  font-size: 10px;
+}
+
+.builtin-detection-panel__notice .button {
+  min-height: 32px;
+  flex: 0 0 auto;
 }
 
 .feature-row {
@@ -4446,6 +4501,20 @@ a:focus-visible {
   .feature-row__range {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+
+  .detection-runtime-summary,
+  .builtin-detection-panel__notice {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .detection-runtime-summary strong {
+    text-align: left;
+  }
+
+  .builtin-detection-panel__notice {
+    padding-left: 2px;
   }
 
   .feature-row--tracking .tracking-controls {

@@ -524,7 +524,8 @@ export function useDeviceConfiguration({
     setDraft(cloneValues(document.values));
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (overrideApiBaseUrl?: string) => {
+    const requestApiBaseUrl = overrideApiBaseUrl ?? apiBaseUrl;
     const controller = beginOperation();
     setStatus("loading");
     setRequestError(null);
@@ -533,8 +534,8 @@ export function useDeviceConfiguration({
     setTask(null);
     try {
       const [nextCapabilities, document] = await Promise.all([
-        getConfigCapabilities(apiBaseUrl, controller.signal),
-        getCurrentConfig(apiBaseUrl, controller.signal),
+        getConfigCapabilities(requestApiBaseUrl, controller.signal),
+        getCurrentConfig(requestApiBaseUrl, controller.signal),
       ]);
       if (controller.signal.aborted) return;
       setCapabilities(nextCapabilities);

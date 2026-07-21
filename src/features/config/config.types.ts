@@ -44,6 +44,7 @@ export interface ProcessingSizeCapability {
   max_height?: number;
   step?: number;
   default?: ProcessingSize;
+  presets?: ProcessingSize[];
   constraints?: ProcessingSizeConstraints;
 }
 

@@ -276,6 +276,7 @@ interface ProcessingSizeEditorProps {
   capability: ProcessingSizeCapability;
   disabled: boolean;
   onChange: (value: ProcessingSize) => void;
+  recommendedPresets?: ProcessingSize[];
 }
 
 function ProcessingSizeEditor({
@@ -284,6 +285,7 @@ function ProcessingSizeEditor({
   capability,
   disabled,
   onChange,
+  recommendedPresets = [],
 }: ProcessingSizeEditorProps) {
   const { t } = useTranslation();
   const constraints = processingSizeConstraints(capability);
@@ -305,9 +307,19 @@ function ProcessingSizeEditor({
       </div>
     );
   }
-  const presets = Array.isArray(constraints.presets)
-    ? constraints.presets
-    : [];
+  const presets = [...(constraints.presets ?? []), ...(capability.presets ?? []), ...recommendedPresets]
+    .filter(
+      (preset, index, all) =>
+        preset.width >= constraints.minWidth! &&
+        preset.width <= constraints.maxWidth! &&
+        preset.height >= constraints.minHeight! &&
+        preset.height <= constraints.maxHeight! &&
+        (preset.width - constraints.minWidth!) % constraints.widthStep! === 0 &&
+        (preset.height - constraints.minHeight!) % constraints.heightStep! === 0 &&
+        all.findIndex(
+          (entry) => entry.width === preset.width && entry.height === preset.height,
+        ) === index,
+    );
   const presetValue = presets.some(
     (preset) => preset.width === value.width && preset.height === value.height,
   )
@@ -389,6 +401,8 @@ interface DetectionRowProps {
   processingSize?: ProcessingSize;
   processingCapability?: ProcessingSizeCapability;
   onProcessingSize?: (value: ProcessingSize) => void;
+  toggleDisabled?: boolean;
+  recommendedPresets?: ProcessingSize[];
 }
 
 function DetectionRow({
@@ -409,6 +423,8 @@ function DetectionRow({
   processingSize,
   processingCapability,
   onProcessingSize,
+  toggleDisabled = false,
+  recommendedPresets,
 }: DetectionRowProps) {
   const { t } = useTranslation();
   return (
@@ -442,7 +458,7 @@ function DetectionRow({
       </label>
       <Toggle
         checked={enabled}
-        disabled={!supported}
+        disabled={!supported || toggleDisabled}
         label={toggleLabel}
         onChange={onToggle}
       />
@@ -453,6 +469,7 @@ function DetectionRow({
           capability={processingCapability}
           disabled={!supported || !enabled}
           onChange={onProcessingSize}
+          recommendedPresets={recommendedPresets}
         />
       )}
     </div>
@@ -629,8 +646,7 @@ export function DeviceConfiguration({
   const [confirmNetworkReset, setConfirmNetworkReset] = useState(false);
   const [networkResetting, setNetworkResetting] = useState(false);
   const [networkResetError, setNetworkResetError] = useState<string | null>(null);
-  const [activeDetectionModel, setActiveDetectionModel] =
-    useState<ModelSummary | null>(null);
+  const [customModels, setCustomModels] = useState<ModelSummary[]>([]);
   const [modelRefreshToken, setModelRefreshToken] = useState(0);
   const [activeSection, setActiveSection] =
     useState<ConfigSectionId>("video");
@@ -806,6 +822,31 @@ export function DeviceConfiguration({
       ),
     [configuration.capabilities],
   );
+  const objectCapability = tpuCapabilities.find(
+    (capability) => capability.id === "object",
+  );
+  const nonObjectTpuCapabilities = tpuCapabilities.filter(
+    (capability) => capability.id !== "object",
+  );
+  const objectValues = configuration.draft?.detection.object;
+  const runtimeObjectValues = configuration.original?.detection.object;
+  const builtinDetectionActive =
+    objectValues?.enabled === true && objectValues.model.source === "builtin";
+  const customDetectionActive =
+    runtimeObjectValues?.enabled === true &&
+    runtimeObjectValues.model.source === "custom";
+  const selectedCustomModel =
+    runtimeObjectValues?.model.source === "custom"
+      ? customModels.find((model) => model.id === runtimeObjectValues.model.id) ??
+        null
+      : null;
+  const runningModelLabel = !runtimeObjectValues?.enabled
+    ? t("config.detection.noRunningModel")
+    : runtimeObjectValues.model.source === "builtin"
+      ? t("config.detection.builtinRunningModel")
+      : t("config.detection.customRunningModel", {
+          name: selectedCustomModel?.name ?? runtimeObjectValues.model.id,
+        });
 
   useEffect(() => {
     if (
@@ -817,9 +858,13 @@ export function DeviceConfiguration({
   }, [configuration.applicationState]);
 
   const reloadConfiguration = configuration.load;
-  const reloadAfterModelDeployment = useCallback(async () => {
-    await reloadConfiguration();
-  }, [reloadConfiguration]);
+  const reloadAfterModelDeployment = useCallback(
+    async (recoveredApiBaseUrl: string) => {
+      if (configuration.hasChanges) return;
+      await reloadConfiguration(recoveredApiBaseUrl);
+    },
+    [configuration.hasChanges, reloadConfiguration],
+  );
 
   const confirmCustomModelActivation = useCallback(() => {
     const draft = configuration.draft;
@@ -957,7 +1002,7 @@ export function DeviceConfiguration({
                     <button
                       className="button button--ghost"
                       type="button"
-                      disabled={isBusy}
+                      disabled={isBusy || applicationLocked}
                       onClick={() => setConfirmReset(true)}
                     >
                       <RotateCcw size={15} />{t("config.restoreDefaults")}
@@ -965,7 +1010,9 @@ export function DeviceConfiguration({
                     <button
                       className="button button--primary config-save-button"
                       type="button"
-                      disabled={!configuration.hasChanges || isBusy}
+                      disabled={
+                        !configuration.hasChanges || isBusy || applicationLocked
+                      }
                       onClick={() => void configuration.saveAndApply()}
                     >
                       {isBusy ? (
@@ -1130,7 +1177,10 @@ export function DeviceConfiguration({
                     </div>
                   )}
 
-                <fieldset className="configuration-form" disabled={isBusy}>
+                <fieldset
+                  className="configuration-form"
+                  disabled={isBusy || applicationLocked}
+                >
                   <section
                     className="config-section"
                     aria-labelledby="video-config-heading"
@@ -1279,6 +1329,74 @@ export function DeviceConfiguration({
                       </div>
                     </div>
                     <div className="feature-list">
+                      <div className="detection-runtime-summary" aria-live="polite">
+                        <span>{t("config.detection.runningModel")}</span>
+                        <strong>{runningModelLabel}</strong>
+                      </div>
+                      {objectCapability && objectValues && (
+                        <div className="builtin-detection-panel">
+                          <DetectionRow
+                            icon={<Settings2 size={17} />}
+                            title={t("config.detection.builtinPerson")}
+                            detail={`${t("config.detection.model")}: TDL_MODEL_YOLOV8N_DET_MONITOR_PERSON`}
+                            supported
+                            enabled={builtinDetectionActive}
+                            toggleDisabled={
+                              runtimeObjectValues?.model.source === "custom"
+                            }
+                            value={objectValues.threshold}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            valueLabel={objectValues.threshold.toFixed(2)}
+                            rangeLabel={t("config.detection.threshold")}
+                            toggleLabel={t("config.detection.enableBuiltinPerson")}
+                            onToggle={(checked) => {
+                              if (runtimeObjectValues?.model.source === "custom") return;
+                              setTpuEnabled("object", checked);
+                            }}
+                            onValue={(value) => setTpuThreshold("object", value)}
+                            processingSize={
+                              objectValues.processing_size ??
+                              (objectCapability.processing_size
+                                ? processingSizeDefault(objectCapability.processing_size)
+                                : undefined)
+                            }
+                            processingCapability={
+                              objectCapability.processing_size ??
+                              objectCapability.processingSize
+                            }
+                            recommendedPresets={[
+                              { width: 448, height: 256 },
+                              { width: 512, height: 288 },
+                              { width: 640, height: 360 },
+                              { width: 640, height: 384 },
+                            ]}
+                            onProcessingSize={(value) =>
+                              configuration.updateDraft((draft) => {
+                                draft.detection.object.processing_size = value;
+                              })
+                            }
+                          />
+                          {runtimeObjectValues?.model.source === "custom" && (
+                            <div className="builtin-detection-panel__notice">
+                              <span>
+                                {customDetectionActive
+                                  ? t("config.detection.customModelBlocksBuiltin")
+                                  : t("config.detection.customModelSelected")}
+                              </span>
+                              <button
+                                className="button button--ghost"
+                                type="button"
+                                onClick={() => scrollToSection("models")}
+                              >
+                                <Boxes size={14} />
+                                {t("config.detection.manageModels")}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <div className="feature-row feature-row--simple">
                         <div className="feature-row__identity">
                           <span aria-hidden="true">
@@ -1306,7 +1424,7 @@ export function DeviceConfiguration({
                           }
                         />
                       </div>
-                      {tpuCapabilities.map((capability) => {
+                      {nonObjectTpuCapabilities.map((capability) => {
                         const draft = configuration.draft;
                         if (!draft) return null;
                         if (capability.id === "object_tracking") {
@@ -1369,21 +1487,15 @@ export function DeviceConfiguration({
                             : draft.detection[capability.id];
                         if (!values) return null;
                         const title =
-                          capability.id === "object"
-                            ? t("config.detection.objectDetection")
-                            : capability.id === "face"
+                          capability.id === "face"
                               ? t("config.detection.face")
                               : t("config.detection.humanPose");
                         const toggleLabel =
-                          capability.id === "object"
-                            ? t("config.detection.enablePerson")
-                            : capability.id === "face"
+                          capability.id === "face"
                               ? t("config.detection.enableFace")
                               : t("config.detection.enableHumanPose");
                         const icon =
-                          capability.id === "object" ? (
-                            <Settings2 size={17} />
-                          ) : capability.id === "face" ? (
+                          capability.id === "face" ? (
                             <ScanFace size={17} />
                           ) : (
                             <PersonStanding size={17} />
@@ -1396,24 +1508,7 @@ export function DeviceConfiguration({
                           (processingCapability
                             ? processingSizeDefault(processingCapability)
                             : undefined);
-                        const modelDetail =
-                          capability.id === "object"
-                            ? `${t("config.detection.currentModel")}: ${
-                                activeDetectionModel?.name ??
-                                draft.detection.object.model.runtime_model ??
-                                draft.detection.object.model.id ??
-                                capability.name
-                              } · ${t("config.detection.source")}: ${
-                                activeDetectionModel ||
-                                draft.detection.object.model.source === "custom"
-                                  ? t("config.detection.customSource")
-                                  : t("config.detection.builtinSource")
-                              } · ${t("config.detection.runtimeStatus")}: ${
-                                values.enabled
-                                  ? t("common.enabled")
-                                  : t("common.disabled")
-                              }`
-                            : capability.model ?? capability.name;
+                        const modelDetail = capability.model ?? capability.name;
 
                         return (
                           <DetectionRow
@@ -1422,11 +1517,7 @@ export function DeviceConfiguration({
                             title={title}
                             detail={modelDetail}
                             supported
-                            enabled={
-                              values.enabled ||
-                              (capability.id === "object" &&
-                                activeDetectionModel?.active === true)
-                            }
+                            enabled={values.enabled}
                             value={values.threshold}
                             min={0}
                             max={1}
@@ -1439,7 +1530,7 @@ export function DeviceConfiguration({
                             }
                             onValue={(value) =>
                               setTpuThreshold(
-                                capability.id as "object" | "face" | "human_pose",
+                                capability.id as "face" | "human_pose",
                                 value,
                               )
                             }
@@ -1447,7 +1538,7 @@ export function DeviceConfiguration({
                             processingCapability={processingCapability}
                             onProcessingSize={(value) =>
                               configuration.updateDraft((nextDraft) => {
-                                if (capability.id === "object" || capability.id === "face") {
+                                if (capability.id === "face") {
                                   nextDraft.detection[capability.id].processing_size = value;
                                 } else if (nextDraft.detection.human_pose) {
                                   nextDraft.detection.human_pose.processing_size = value;
@@ -1516,9 +1607,18 @@ export function DeviceConfiguration({
                       deviceId={device.device_id}
                       disabled={isBusy}
                       refreshToken={modelRefreshToken}
-                      onActiveModelChange={setActiveDetectionModel}
+                      activeDetectionModelId={
+                        runtimeObjectValues?.model.source === "custom"
+                          ? runtimeObjectValues.model.id
+                          : null
+                      }
+                      customDetectionActive={customDetectionActive}
+                      hasUnsavedConfig={configuration.hasChanges}
+                      onModelsChange={setCustomModels}
                       onDeploymentComplete={reloadAfterModelDeployment}
                       onBeforeActivate={confirmCustomModelActivation}
+                      onApplicationLockChange={onApplicationLockChange}
+                      onDeviceRecovered={onDeviceRecovered}
                     />
                   </section>
                 </fieldset>

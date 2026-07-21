@@ -490,13 +490,17 @@ async function discoverSingleDevice(
   ).toBeVisible();
 }
 
-async function mockConfigurationRead(page: Page) {
+async function mockConfigurationRead(
+  page: Page,
+  document = currentConfig,
+  models: unknown[] = [],
+) {
   await page.route("**/api/v1/models/importers", (route) =>
     fulfillJson(route, modelImporterCatalog),
   );
   await page.route("**/api/v1/models", (route) =>
     fulfillJson(route, {
-      models: [],
+      models,
       storage: {
         totalBytes: 67_108_864,
         availableBytes: 52_428_800,
@@ -509,7 +513,7 @@ async function mockConfigurationRead(page: Page) {
   );
   await page.route("**/api/v1/config", (route) => {
     if (route.request().method() === "GET") {
-      return fulfillJson(route, currentConfig);
+      return fulfillJson(route, document);
     }
     return route.fallback();
   });
@@ -1426,10 +1430,14 @@ test("imports a model with same-origin full-file upload and CSRF writes", async 
 test("shows an active custom detector as the single object detection pipeline", async ({
   page,
 }) => {
-  await mockConfigurationRead(page);
-  await page.route("**/api/v1/models", (route) =>
-    fulfillJson(route, {
-      models: [
+  const customConfig = structuredClone(currentConfig);
+  customConfig.values.detection.object.enabled = true;
+  customConfig.values.detection.object.model = {
+    source: "custom",
+    id: "018f1234abcd5678",
+    runtime_model: "YOLOV8",
+  };
+  await mockConfigurationRead(page, customConfig, [
         {
           id: "018f1234abcd5678",
           status: "ready",
@@ -1451,22 +1459,102 @@ test("shows an active custom detector as the single object detection pipeline", 
             processingSize: { width: 448, height: 256 },
           },
         },
-      ],
-      storage: {
-        totalBytes: 67_108_864,
-        availableBytes: 52_428_800,
-        reservedBytes: 2_097_152,
-      },
-    }),
-  );
+      ]);
   await discoverSingleDevice(page);
   await page.getByRole("radio").click();
   await page.getByRole("button", { name: "连接", exact: true }).click();
 
-  await expect(page.getByText("当前模型: 安全帽检测")).toBeVisible();
-  await expect(page.getByText("来源: 自定义")).toBeVisible();
-  await expect(page.getByRole("switch", { name: "启用目标检测" })).toBeChecked();
-  await expect(page.getByText("人员检测", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("自定义 · 安全帽检测")).toBeVisible();
+  const builtin = page.getByRole("switch", { name: "启用内置人员检测" });
+  await expect(builtin).not.toBeChecked();
+  await expect(builtin).toBeDisabled();
+  await expect(
+    page.getByText("自定义模型正在运行，请先停用自定义模型。"),
+  ).toBeVisible();
+  await expect(page.getByText("运行中", { exact: true })).toBeVisible();
+});
+
+test("uses config model source instead of the model-list active flag", async ({
+  page,
+}) => {
+  await mockConfigurationRead(page, currentConfig, [
+    {
+      id: "018f1234abcd5678",
+      status: "ready",
+      importerId: "detection.yolov8",
+      schemaVersion: 1,
+      name: "安全帽检测",
+      fileSize: 3_145_728,
+      createdAt: 1_784_505_600,
+      committedAt: 1_784_505_605,
+      modelType: "YOLOV8",
+      task: "object_detection",
+      deployable: true,
+      metadataSummary: { labelsCount: 2 },
+      active: true,
+      referenced: true,
+      tensorSize: { width: 640, height: 640 },
+      deployment: {
+        threshold: 0.3,
+        processingSize: { width: 448, height: 256 },
+      },
+    },
+  ]);
+  await discoverSingleDevice(page);
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+
+  await expect(page.locator(".detection-runtime-summary")).toContainText(
+    "内置 · 人员检测",
+  );
+  await expect(
+    page.getByRole("switch", { name: "启用内置人员检测" }),
+  ).toBeChecked();
+});
+
+test("blocks model activation while the configuration draft is unsaved", async ({
+  page,
+}) => {
+  let activateRequests = 0;
+  await mockConfigurationRead(page, currentConfig, [
+    {
+      id: "018f1234abcd5678",
+      status: "ready",
+      importerId: "detection.yolov8",
+      schemaVersion: 1,
+      name: "安全帽检测",
+      fileSize: 3_145_728,
+      createdAt: 1_784_505_600,
+      committedAt: 1_784_505_605,
+      modelType: "YOLOV8",
+      task: "object_detection",
+      deployable: true,
+      metadataSummary: { labelsCount: 2 },
+      active: false,
+      referenced: false,
+      tensorSize: { width: 640, height: 640 },
+      deployment: {
+        threshold: 0.3,
+        processingSize: { width: 448, height: 256 },
+      },
+    },
+  ]);
+  await page.route("**/api/v1/models/018f1234abcd5678/activate", (route) => {
+    activateRequests += 1;
+    return fulfillJson(route, { task_id: 88 });
+  });
+  await discoverSingleDevice(page);
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+
+  await page.getByRole("switch", { name: "启用 OSD" }).click();
+  await page.getByRole("button", { name: /模型管理/ }).click();
+  await page.getByTitle("启用").click();
+
+  await expect(
+    page.getByText("当前配置存在未保存更改，请先保存或放弃更改。"),
+  ).toBeVisible();
+  expect(activateRequests).toBe(0);
 });
 
 test("probes the last successful device address first on the next scan", async ({
@@ -1503,17 +1591,16 @@ test("renders AI capabilities and keeps TPU features mutually exclusive", async 
   await page.getByRole("radio").click();
   await page.getByRole("button", { name: "连接", exact: true }).click();
 
-  const person = page.getByRole("switch", { name: "启用目标检测" });
+  const person = page.getByRole("switch", { name: "启用内置人员检测" });
   const face = page.getByRole("switch", { name: "启用人脸检测" });
   const pose = page.getByRole("switch", { name: "启用人体姿态检测" });
   const tracking = page.getByRole("switch", { name: "启用目标检测与跟踪" });
   const motion = page.getByRole("switch", { name: "启用移动检测" });
 
-  await expect(page.getByText("YOLOv8n Monitor Person")).toBeVisible();
-  await expect(page.getByText("当前模型: YOLOv8n Monitor Person")).toBeVisible();
-  await expect(page.getByText("来源: 内置")).toBeVisible();
-  await expect(page.getByLabel("AI 处理分辨率 宽度").first()).toHaveValue("448");
-  await expect(page.getByLabel("AI 处理分辨率 高度").first()).toHaveValue("256");
+  await expect(page.getByText("TDL_MODEL_YOLOV8N_DET_MONITOR_PERSON")).toBeVisible();
+  await expect(page.getByText("内置 · 人员检测")).toBeVisible();
+  await expect(page.getByLabel("AI 输入帧尺寸 宽度").first()).toHaveValue("448");
+  await expect(page.getByLabel("AI 输入帧尺寸 高度").first()).toHaveValue("256");
   await expect(page.getByText("YOLOv8 Pose")).toBeVisible();
   await expect(page.getByText("YOLOv8n + FearTrack")).toBeVisible();
   await expect(person).toBeChecked();
@@ -1569,7 +1656,7 @@ test("keeps AI configuration usable when processing-size constraints are absent"
   await page.getByRole("radio").click();
   await page.getByRole("button", { name: "连接", exact: true }).click();
 
-  await expect(page.getByRole("switch", { name: "启用目标检测" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "启用内置人员检测" })).toBeVisible();
   await expect(page.locator(".processing-size-editor--readonly")).toContainText(
     "448 × 256",
   );

@@ -3,7 +3,11 @@ import {
   clearPendingConfigApplication,
   readPendingConfigApplication,
 } from "../config/config.session";
-import { reconnectConfigDevice } from "../config/config.recovery";
+import { reconnectDeviceByIdentity } from "../config/config.recovery";
+import {
+  clearPendingModelTask,
+  readPendingModelTask,
+} from "../models/model.session";
 import {
   buildDeviceApiBaseUrl,
   DeviceConnectionError,
@@ -101,7 +105,10 @@ function mergeDiscoveredDevices(
 
 export function useDeviceConnection(): UseDeviceConnection {
   const browserSupported = isSupportedBrowser();
-  const startupPending = useMemo(() => readPendingConfigApplication(), []);
+  const startupPending = useMemo(
+    () => readPendingConfigApplication() ?? readPendingModelTask(),
+    [],
+  );
   const [state, setState] = useState<DeviceState>(
     startupPending ? "recovering" : browserSupported ? "idle" : "error",
   );
@@ -218,14 +225,18 @@ export function useDeviceConnection(): UseDeviceConnection {
     setState("recovering");
     setApplicationLocked(true);
 
-    void reconnectConfigDevice(startupPending, controller.signal)
+    void reconnectDeviceByIdentity(startupPending, controller.signal)
       .then((recovered) => {
         if (controller.signal.aborted) return;
         adoptRecoveredDevice(recovered.apiBaseUrl, recovered.info);
       })
       .catch(() => {
         if (controller.signal.aborted) return;
-        clearPendingConfigApplication();
+        if ("target_revision" in startupPending) {
+          clearPendingConfigApplication();
+        } else {
+          clearPendingModelTask();
+        }
         setApplicationLocked(false);
         setError("NETWORK_ERROR");
         setState("error");
