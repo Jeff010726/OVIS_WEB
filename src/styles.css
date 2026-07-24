@@ -1,20 +1,77 @@
 :root {
   font-family: "Inter Variable", "Noto Sans SC Variable", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #f2f2f2;
-  background: #080808;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   letter-spacing: 0;
   --bg: #080808;
   --panel: #0e0e0e;
   --panel-raised: #121212;
+  --panel-overlay: rgba(13, 13, 13, 0.96);
+  --header-bg: rgba(8, 8, 8, 0.88);
+  --surface-deep: #090909;
+  --surface-sunken: #0a0a0a;
+  --surface: #0b0b0b;
+  --surface-layer: #0c0c0c;
+  --surface-subtle: #0d0d0d;
+  --surface-soft: #101010;
+  --surface-control: #111;
+  --surface-hover-soft: #141414;
+  --surface-selected: #151515;
+  --surface-hover: #181818;
+  --surface-disabled: #202020;
   --line: #292929;
   --line-soft: #1b1b1b;
+  --line-strong: #3a3a3a;
   --text: #f2f2f2;
+  --text-strong: #ededed;
   --muted: #8a8a8a;
   --muted-light: #b2b2b2;
+  --grid-line: rgba(255, 255, 255, 0.018);
+  --shadow: rgba(0, 0, 0, 0.55);
+  --success-bg: #10140c;
+  --danger-bg: #15100f;
+  --warning-bg: #15130f;
   --success: #c5f36a;
   --danger: #ff8c7c;
+  --warning: #e3c882;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f4f5;
+  --panel: #ffffff;
+  --panel-raised: #eef0f2;
+  --panel-overlay: rgba(255, 255, 255, 0.97);
+  --header-bg: rgba(255, 255, 255, 0.9);
+  --surface-deep: #eef0f2;
+  --surface-sunken: #f0f1f2;
+  --surface: #ffffff;
+  --surface-layer: #f8f9f9;
+  --surface-subtle: #f6f7f8;
+  --surface-soft: #f1f2f3;
+  --surface-control: #ffffff;
+  --surface-hover-soft: #edf0f1;
+  --surface-selected: #e8ebed;
+  --surface-hover: #e4e7e9;
+  --surface-disabled: #e0e3e5;
+  --line: #c9ced2;
+  --line-soft: #dfe3e6;
+  --line-strong: #aab1b7;
+  --text: #181b1e;
+  --text-strong: #111315;
+  --muted: #68727a;
+  --muted-light: #424a50;
+  --grid-line: rgba(20, 28, 34, 0.045);
+  --shadow: rgba(28, 34, 39, 0.18);
+  --success-bg: #edf6de;
+  --danger-bg: #fff0ed;
+  --warning-bg: #fff7e3;
+  --success: #4e7609;
+  --danger: #b53528;
+  --warning: #805e10;
 }
 
 * {
@@ -32,8 +89,8 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
-    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
     var(--bg);
   background-size: 64px 64px;
 }
@@ -45,7 +102,7 @@ a {
 
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid #f4f4f4;
+  outline: 2px solid var(--text);
   outline-offset: 3px;
 }
 
@@ -391,7 +448,7 @@ a:focus-visible {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--line);
-  background: rgba(8, 8, 8, 0.88);
+  background: var(--header-bg);
   backdrop-filter: blur(18px);
 }
 
@@ -437,6 +494,23 @@ a:focus-visible {
   gap: 8px;
 }
 
+.theme-switcher {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  color: var(--muted-light);
+  background: transparent;
+  cursor: pointer;
+}
+
+.theme-switcher:hover {
+  color: var(--text);
+  background: var(--panel-raised);
+}
+
 .language-switcher {
   position: relative;
 }
@@ -458,7 +532,7 @@ a:focus-visible {
 .language-switcher__trigger:hover,
 .language-switcher__trigger[aria-expanded="true"] {
   color: var(--text);
-  background: #121212;
+  background: var(--panel-raised);
 }
 
 .language-switcher__trigger span {
@@ -473,9 +547,9 @@ a:focus-visible {
   z-index: 20;
   top: calc(100% + 7px);
   right: 0;
-  border: 1px solid #343434;
-  background: #0d0d0d;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-subtle);
+  box-shadow: 0 18px 40px var(--shadow);
 }
 
 .language-switcher__menu button {
@@ -496,7 +570,7 @@ a:focus-visible {
 .language-switcher__menu button:hover,
 .language-switcher__menu button[aria-checked="true"] {
   color: var(--text);
-  background: #181818;
+  background: var(--surface-hover);
 }
 
 .status-indicator {
@@ -3811,8 +3885,13 @@ a:focus-visible {
   }
 
   .status-indicator,
+  .theme-switcher,
   .language-switcher__trigger {
     min-height: clamp(34px, 1.68vw, 43px);
+  }
+
+  .theme-switcher {
+    width: clamp(34px, 1.68vw, 43px);
   }
 
   .status-indicator {
@@ -4756,6 +4835,24 @@ a:focus-visible {
 
 }
 
+@media (max-width: 420px) {
+  .language-switcher__trigger {
+    min-width: 34px;
+    width: 34px;
+    padding: 0;
+  }
+
+  .language-switcher__trigger span,
+  .status-indicator > span:last-child {
+    display: none;
+  }
+
+  .status-indicator {
+    width: 34px;
+    justify-content: center;
+  }
+}
+
 @media (max-width: 900px) {
   .model-choice-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4846,4 +4943,306 @@ a:focus-visible {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* Light theme keeps the same restrained hierarchy while increasing text contrast. */
+:root[data-theme="light"] .brand__company-logo {
+  filter: grayscale(1) brightness(0);
+}
+
+:root[data-theme="light"] :is(
+  .workspace-gate__panel,
+  .workspace-panel,
+  .configuration-editor .configuration-toolbar
+) {
+  background: var(--panel-overlay);
+}
+
+:root[data-theme="light"] :is(
+  .workspace-gate__restart-required,
+  .workspace-gate__platform,
+  .button--secondary,
+  .icon-button,
+  .config-field select,
+  .config-field input[type="number"],
+  .processing-size-editor select,
+  .processing-size-editor input,
+  .model-deployment-size select,
+  .model-deployment-size input
+) {
+  background: var(--surface-control);
+}
+
+:root[data-theme="light"] :is(
+  .language-switcher__menu,
+  .manual-connect input,
+  .device-initialization__identity,
+  .device-result,
+  .usb-policy-notice,
+  .subnet-input,
+  .connector-error-stack .manual-connect,
+  .stream-panel,
+  .tracking-control select,
+  .model-import-form input,
+  .model-import-form select,
+  .model-retry-file input,
+  .model-deployment-field input[type="number"],
+  .model-deployment-size input[type="number"],
+  .output-mode-control button,
+  .device-dashboard,
+  .device-network-reset-confirmation,
+  .device-summary__footer,
+  .discovery-actions
+) {
+  background: var(--surface);
+}
+
+:root[data-theme="light"] :is(
+  .model-operation-status,
+  .operation-progress,
+  .model-manager__toolbar,
+  .model-choice-grid > button,
+  .model-importer-list > button,
+  .pending-imports > button
+) {
+  background: var(--surface-layer);
+}
+
+:root[data-theme="light"] :is(
+  .device-result__visual,
+  .device-initialization,
+  .model-metadata pre
+) {
+  background: var(--surface-deep);
+}
+
+:root[data-theme="light"] :is(
+  .connected-device-bar,
+  .configuration-footer,
+  .config-section-nav
+) {
+  background: var(--surface-sunken);
+}
+
+:root[data-theme="light"] :is(
+  .device-result:hover,
+  .model-choice-grid > button:hover,
+  .model-importer-list > button:hover,
+  .pending-imports > button:hover,
+  .model-table__row:hover,
+  .icon-button:hover,
+  .language-switcher__menu button:hover,
+  .language-switcher__menu button[aria-checked="true"],
+  .config-section-nav__list button:hover
+) {
+  background: var(--surface-hover);
+}
+
+:root[data-theme="light"] .button--ghost:hover {
+  background: var(--surface-hover-soft);
+}
+
+:root[data-theme="light"] .device-result__selector {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+:root[data-theme="light"] :is(
+  .device-result[aria-checked="true"],
+  .config-section-nav__list button.is-active,
+  .workspace-gate__platform[aria-selected="true"]
+) {
+  background: var(--surface-selected);
+}
+
+:root[data-theme="light"] :is(
+  .button--primary,
+  .workspace-gate__download--primary,
+  .subnet-input input,
+  .device-result[aria-checked="true"] .device-result__selector,
+  .output-mode-control button[aria-checked="true"]
+) {
+  color: #fff;
+  background: var(--text);
+}
+
+:root[data-theme="light"] .button--primary:hover {
+  background: #30353a;
+}
+
+:root[data-theme="light"] :is(.button--primary:disabled, .icon-button:disabled) {
+  color: #7c858c;
+  border-color: var(--line-soft);
+  background: var(--surface-disabled);
+}
+
+:root[data-theme="light"] :is(
+  .workspace-gate__platform,
+  .workspace-gate__icon,
+  .workspace-gate__restart-required,
+  .usb-provisioning__heading > span,
+  .usb-provisioning__address input,
+  .manual-connect input,
+  .language-switcher__menu,
+  .button--secondary,
+  .device-result,
+  .subnet-input,
+  .icon-button,
+  .config-field select,
+  .config-field input[type="number"],
+  .processing-size-editor select,
+  .processing-size-editor input,
+  .model-import-form input,
+  .model-import-form select,
+  .model-retry-file input,
+  .model-deployment-field input[type="number"],
+  .model-deployment-size input,
+  .tracking-control select,
+  .device-network-reset-confirmation
+) {
+  border-color: var(--line-strong);
+}
+
+:root[data-theme="light"] :is(
+  .manual-connect input,
+  .usb-provisioning__address input,
+  .config-field select,
+  .config-field input[type="number"],
+  .processing-size-editor select,
+  .processing-size-editor input,
+  .model-deployment-size select,
+  .model-deployment-size input,
+  .tracking-control select
+) {
+  color: var(--text);
+}
+
+:root[data-theme="light"] :is(
+  .loading-spinner,
+  .device-result[data-status="setup"] .device-result__status,
+  .device-connect-failure,
+  .device-initialization__transport,
+  .device-initialization__identity dd,
+  .device-initialization__workspace form > label,
+  .info-row dd,
+  .button--disconnect,
+  .connected-device-bar__meta dd,
+  .configuration-loading > svg,
+  .operation-progress svg,
+  .detection-runtime-summary strong,
+  .builtin-detection-panel__notice,
+  .feature-row__range output,
+  .tracking-control select,
+  .config-section-nav__header output,
+  .config-section-nav__list button:hover,
+  .config-section-nav__list button.is-active,
+  .device-dashboard__meta dd
+) {
+  color: var(--text);
+}
+
+:root[data-theme="light"] :is(
+  .workspace-gate__download--primary span small,
+  .connector-state--loading small,
+  .device-result__placeholder,
+  .device-result__serial,
+  .device-result__endpoint,
+  .empty-results,
+  .info-section__heading span,
+  .connection-time,
+  .connected-device-bar__meta dt,
+  .config-section__heading > svg,
+  .config-section__heading span,
+  .stream-panel__heading span,
+  .stream-panel__heading small,
+  .number-input small,
+  .config-field em,
+  .feature-row__identity > span,
+  .tracking-control select:disabled,
+  .model-list-editor__row > span,
+  .model-table__head,
+  .configuration-footer,
+  .config-section-nav__header > span,
+  .config-section-nav__header output small,
+  .config-section-nav__list button,
+  .config-section-nav__list button > span,
+  .device-dashboard__visual,
+  .device-dashboard__identity p,
+  .device-dashboard__meta dt,
+  .device-dashboard__reset-address
+) {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] :is(
+  .draft-state--dirty,
+  .config-notice--warning
+) {
+  color: var(--warning);
+}
+
+:root[data-theme="light"] :is(.model-unapplied-status, .config-notice--success) {
+  background: var(--success-bg);
+}
+
+:root[data-theme="light"] :is(
+  .device-connect-failure,
+  .error-message,
+  .initialization-error,
+  .config-notice--error,
+  .model-error,
+  .model-validation-error,
+  .model-form-errors,
+  .model-dialog
+) {
+  background: var(--danger-bg);
+}
+
+:root[data-theme="light"] :is(
+  .reset-confirmation,
+  .config-notice--warning
+) {
+  background: var(--warning-bg);
+}
+
+:root[data-theme="light"] .config-toggle {
+  border-color: #9fa7ad;
+  background: #d9dde0;
+}
+
+:root[data-theme="light"] .config-toggle span {
+  background: #717a81;
+}
+
+:root[data-theme="light"] .config-toggle[aria-checked="true"] {
+  border-color: #7d9c49;
+  background: #e4f0cf;
+}
+
+:root[data-theme="light"] .operation-progress__track,
+:root[data-theme="light"] .model-upload-progress > span,
+:root[data-theme="light"] .model-task-progress > span {
+  background: #ccd2d6;
+}
+
+:root[data-theme="light"] .operation-progress__track > span,
+:root[data-theme="light"] .config-section-nav__list button.is-active::before {
+  background: var(--text);
+}
+
+:root[data-theme="light"] .configuration-editor {
+  scrollbar-color: #a9b0b5 #eef0f2;
+}
+
+:root[data-theme="light"] .configuration-editor::-webkit-scrollbar-track {
+  background: #eef0f2;
+}
+
+:root[data-theme="light"] .configuration-editor::-webkit-scrollbar-thumb {
+  background: #a9b0b5;
+}
+
+:root[data-theme="light"] .device-result__visual img,
+:root[data-theme="light"] .device-initialization__visual img {
+  filter: grayscale(1) brightness(0.78) contrast(1.12);
 }

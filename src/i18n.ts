@@ -17,6 +17,12 @@ export const resources = {
         englishShort: "EN",
         chineseShort: "简中",
       },
+      theme: {
+        switchTo: {
+          light: "Switch to light theme",
+          dark: "Switch to dark theme",
+        },
+      },
       app: {
         home: "OVIS Manager home",
         connectionTitle: "Device Connection",
@@ -621,6 +627,12 @@ export const resources = {
         chinese: "简体中文",
         englishShort: "EN",
         chineseShort: "简中",
+      },
+      theme: {
+        switchTo: {
+          light: "切换为浅色模式",
+          dark: "切换为深色模式",
+        },
       },
       app: {
         home: "OVIS Manager 首页",

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Page, Route } from "@playwright/test";
 
 const LANGUAGE_TEST_TITLE = "defaults to English and persists a Simplified Chinese selection";
+const THEME_TEST_TITLE = "defaults to dark and persists a light theme selection";
 const RESPONSIVE_IDLE_TEST_TITLE = "keeps the 1080p idle composition proportional at 2K";
 const RESPONSIVE_CONFIG_TEST_TITLE =
   "scales the configuration workspace and keeps the dashboard fixed at 2K";
@@ -23,6 +24,7 @@ test.beforeEach(async ({ page }, testInfo) => {
   if (
     [
       LANGUAGE_TEST_TITLE,
+      THEME_TEST_TITLE,
       RESPONSIVE_IDLE_TEST_TITLE,
       RESPONSIVE_CONFIG_TEST_TITLE,
       ENGLISH_MOBILE_CONFIG_TEST_TITLE,
@@ -614,6 +616,25 @@ test(LANGUAGE_TEST_TITLE, async ({ page }) => {
   await page.reload();
   await expect(page.getByRole("heading", { name: "设备连接" })).toHaveCount(0);
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+});
+
+test(THEME_TEST_TITLE, async ({ page }) => {
+  await page.goto("./");
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  const themeButton = page.getByRole("button", { name: "Switch to light theme" });
+  await expect(themeButton).toBeVisible();
+  await themeButton.click();
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByRole("button", { name: "Switch to dark theme" })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("ovis_manager_theme")))
+    .toBe("light");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByRole("button", { name: "Switch to dark theme" })).toBeVisible();
 });
 
 test(RESPONSIVE_IDLE_TEST_TITLE, async ({ page }) => {

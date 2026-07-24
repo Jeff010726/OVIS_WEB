@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
+import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { DeviceConnector } from "./features/device/DeviceConnector";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
 
@@ -28,6 +29,7 @@ function DeviceWorkspace() {
           <span className="brand__product">DEVICE MANAGER</span>
         </a>
         <div className="app-header__actions">
+          <ThemeSwitcher />
           <LanguageSwitcher />
           <ConnectionStatus
             state={connection.state}

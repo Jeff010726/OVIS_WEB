@@ -13,10 +13,16 @@ export function ConnectionStatus({
   const { t } = useTranslation();
   const displayState =
     state === "connected" && applicationLocked ? "recovering" : state;
+  const label = t(`status.${displayState}`);
   return (
-    <div className={`status-indicator status-indicator--${displayState}`} role="status">
+    <div
+      className={`status-indicator status-indicator--${displayState}`}
+      role="status"
+      aria-label={label}
+      title={label}
+    >
       <span className="status-indicator__dot" aria-hidden="true" />
-      <span>{t(`status.${displayState}`)}</span>
+      <span>{label}</span>
     </div>
   );
 }
