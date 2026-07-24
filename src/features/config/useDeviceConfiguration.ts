@@ -36,8 +36,11 @@ import type {
   ConfigurationStatus,
   DeviceConfigDocument,
   DeviceConfigValues,
+  OverlayConfigValues,
+  OverlayTextPosition,
   ProcessingSize,
   ProcessingSizeCapability,
+  SerializedDeviceConfigValues,
   TpuFeatureId,
 } from "./config.types";
 
@@ -45,6 +48,95 @@ const TASK_VERIFY_INTERVAL_MS = 1_500;
 const MAX_RESET_TASK_POLLS = 60;
 
 const cloneValues = (values: DeviceConfigValues) => structuredClone(values);
+
+const OVERLAY_TEXT_POSITIONS: OverlayTextPosition[] = [
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+  "custom",
+];
+
+const defaultOverlayValues = (enabled = false): OverlayConfigValues => ({
+  enabled,
+  texts: [
+    {
+      id: "primary",
+      enabled: false,
+      content: "",
+      streams: ["main"],
+      position: "top-left",
+      x: 20,
+      y: 40,
+      color: "#FFFFFF",
+    },
+  ],
+  detection: {
+    enabled: false,
+    colorMode: "fixed",
+    color: "#00D9FF",
+    thickness: 2,
+    labelMode: "none",
+  },
+  tracking: {
+    enabled: false,
+    color: "#FFB000",
+    lostColor: "#FF3030",
+    thickness: 3,
+  },
+  reticle: {
+    enabled: false,
+    template: "corners",
+    idleColor: "#FFFFFF",
+    readyColor: "#FFC247",
+    thickness: 2,
+    showWhileTracking: false,
+  },
+});
+
+const normalizeOverlayValues = (value: unknown): OverlayConfigValues => {
+  const raw =
+    typeof value === "object" && value !== null
+      ? (value as Partial<OverlayConfigValues>)
+      : {};
+  const defaults = defaultOverlayValues(raw.enabled === true);
+  const rawTexts = Array.isArray(raw.texts) ? raw.texts : [];
+  const texts = rawTexts.map((entry, index) => {
+    const text = entry as Partial<OverlayConfigValues["texts"][number]>;
+    return {
+      id: typeof text.id === "string" && text.id ? text.id : `text-${index + 1}`,
+      enabled: text.enabled === true,
+      content: typeof text.content === "string" ? text.content : "",
+      streams:
+        Array.isArray(text.streams) && text.streams.every((stream) => typeof stream === "string")
+          ? text.streams
+          : ["main"],
+      position: OVERLAY_TEXT_POSITIONS.includes(text.position as OverlayTextPosition)
+        ? (text.position as OverlayTextPosition)
+        : "top-left",
+      x: Number.isFinite(text.x) ? Number(text.x) : 20,
+      y: Number.isFinite(text.y) ? Number(text.y) : 40,
+      color: typeof text.color === "string" ? text.color : "#FFFFFF",
+    };
+  });
+
+  return {
+    enabled: raw.enabled === true,
+    texts: texts.length > 0 ? texts : defaults.texts,
+    detection: {
+      ...defaults.detection,
+      ...(raw.detection ?? {}),
+    },
+    tracking: {
+      ...defaults.tracking,
+      ...(raw.tracking ?? {}),
+    },
+    reticle: {
+      ...defaults.reticle,
+      ...(raw.reticle ?? {}),
+    },
+  };
+};
 
 const normalizeDetectionModel = (model: unknown): string => {
   if (typeof model === "string" && model.trim()) return model;
@@ -80,6 +172,7 @@ const normalizeConfigValues = (values: DeviceConfigValues): DeviceConfigValues =
     };
     tracking?: Partial<DeviceConfigValues["tracking"]>;
   };
+  normalized.overlay = normalizeOverlayValues(values.overlay);
   normalized.detection.object.model = normalizeDetectionModel(raw.detection.object.model);
 
   const legacyTracking = raw.detection.object_tracking;
@@ -135,8 +228,9 @@ const normalizeOutputMode = (
 
 const serializeConfigValues = (
   values: DeviceConfigValues,
-): DeviceConfigValues => {
-  const serialized: DeviceConfigValues = {
+  capabilities: ConfigCapabilities,
+): SerializedDeviceConfigValues => {
+  const serialized: SerializedDeviceConfigValues = {
     video: {
       main: {
         profile: values.video.main.profile,
@@ -150,9 +244,24 @@ const serializeConfigValues = (
         bitrate_kbps: values.video.sub.bitrate_kbps,
       },
     },
-    overlay: {
-      enabled: values.overlay.enabled,
-    },
+    overlay: capabilities.overlay?.supported
+      ? {
+          enabled: values.overlay.enabled,
+          texts: values.overlay.texts.map((text) => ({
+            id: text.id,
+            enabled: text.enabled,
+            content: text.content,
+            streams: [...text.streams],
+            position: text.position,
+            x: text.x,
+            y: text.y,
+            color: text.color,
+          })),
+          detection: { ...values.overlay.detection },
+          tracking: { ...values.overlay.tracking },
+          reticle: { ...values.overlay.reticle },
+        }
+      : { enabled: values.overlay.enabled },
     detection: {
       object: {
         enabled: values.detection.object.enabled,
@@ -421,6 +530,123 @@ function validateDraftLocally(
     });
   }
 
+  const overlayCapability = capabilities.overlay;
+  if (overlayCapability?.supported) {
+    const overlay = values.overlay;
+    const addOverlayError = (field: string, code: string, message: string) =>
+      errors.push({ field: `values.${field}`, path: `values.${field}`, code, message });
+    const validColor = (color: string) => /^#[0-9A-Fa-f]{6}$/.test(color);
+    const validateColor = (field: string, color: string) => {
+      if (!validColor(color)) {
+        addOverlayError(field, "invalid_color", i18n.t("config.overlay.validation.color"));
+      }
+    };
+    const validateThickness = (field: string, thickness: number) => {
+      if (
+        !Number.isInteger(thickness) ||
+        thickness < overlayCapability.thickness.min ||
+        thickness > overlayCapability.thickness.max
+      ) {
+        addOverlayError(
+          field,
+          "out_of_range",
+          i18n.t("config.overlay.validation.thickness", {
+            min: overlayCapability.thickness.min,
+            max: overlayCapability.thickness.max,
+          }),
+        );
+      }
+    };
+
+    if (overlay.texts.length > overlayCapability.maxTexts) {
+      addOverlayError(
+        "overlay.texts",
+        "too_many_items",
+        i18n.t("config.overlay.validation.maxTexts", {
+          count: overlayCapability.maxTexts,
+        }),
+      );
+    }
+    const mainProfile = capabilities.video.main.profiles.find(
+      (profile) => profile.id === values.video.main.profile,
+    );
+    overlay.texts.forEach((text, index) => {
+      const field = `overlay.texts.${index}`;
+      const byteLength = new TextEncoder().encode(text.content).length;
+      const hasControlCharacter = Array.from(text.content).some((character) => {
+        const codePoint = character.codePointAt(0) ?? 0;
+        return codePoint < 32 || codePoint === 127;
+      });
+      if (
+        byteLength > overlayCapability.textMaxBytes ||
+        hasControlCharacter ||
+        (!overlayCapability.utf8Text && !/^[\x20-\x7E]*$/.test(text.content))
+      ) {
+        addOverlayError(
+          `${field}.content`,
+          "invalid_text",
+          i18n.t("config.overlay.validation.text", {
+            count: overlayCapability.textMaxBytes,
+          }),
+        );
+      }
+      validateColor(`${field}.color`, text.color);
+      if (!text.streams.includes("main")) {
+        addOverlayError(
+          `${field}.streams`,
+          "main_stream_required",
+          i18n.t("config.overlay.validation.mainStream"),
+        );
+      }
+      if (
+        mainProfile &&
+        (!Number.isInteger(text.x) ||
+          !Number.isInteger(text.y) ||
+          text.x < 0 ||
+          text.x >= mainProfile.width ||
+          text.y < 0 ||
+          text.y >= mainProfile.height)
+      ) {
+        addOverlayError(
+          field,
+          "out_of_range",
+          i18n.t("config.overlay.validation.position"),
+        );
+      }
+    });
+
+    validateColor("overlay.detection.color", overlay.detection.color);
+    validateColor("overlay.tracking.color", overlay.tracking.color);
+    validateColor("overlay.tracking.lostColor", overlay.tracking.lostColor);
+    validateColor("overlay.reticle.idleColor", overlay.reticle.idleColor);
+    validateColor("overlay.reticle.readyColor", overlay.reticle.readyColor);
+    validateThickness("overlay.detection.thickness", overlay.detection.thickness);
+    validateThickness("overlay.tracking.thickness", overlay.tracking.thickness);
+    validateThickness("overlay.reticle.thickness", overlay.reticle.thickness);
+
+    if (!overlayCapability.colorModes.includes(overlay.detection.colorMode)) {
+      addOverlayError(
+        "overlay.detection.colorMode",
+        "unsupported_value",
+        i18n.t("config.overlay.validation.unsupported"),
+      );
+    }
+    if (!overlayCapability.labelModes.includes(overlay.detection.labelMode)) {
+      addOverlayError(
+        "overlay.detection.labelMode",
+        "unsupported_value",
+        i18n.t("config.overlay.validation.unsupported"),
+      );
+    }
+    if (!overlayCapability.reticleTemplates.includes(overlay.reticle.template)) {
+      addOverlayError(
+        "overlay.reticle.template",
+        "unsupported_value",
+        i18n.t("config.overlay.validation.unsupported"),
+      );
+    }
+  }
+
   const validateStream = (
     field: "video.main" | "video.sub",
     stream: DeviceConfigValues["video"]["main"],
@@ -633,6 +859,7 @@ interface VerificationResult {
 interface PendingValidatedApplication {
   payload: ConfigPayload;
   controller: AbortController;
+  requiresReconnect: boolean;
 }
 
 export function useDeviceConfiguration({
@@ -648,7 +875,11 @@ export function useDeviceConfiguration({
   const [status, setStatus] = useState<ConfigurationStatus>("loading");
   const [applicationState, setApplicationState] =
     useState<ConfigApplicationState>(
-      pendingAtMount ? "reconnecting" : "idle",
+      pendingAtMount
+        ? pendingAtMount.reconnect_required === false
+          ? "verifying"
+          : "reconnecting"
+        : "idle",
     );
   const [capabilities, setCapabilities] = useState<ConfigCapabilities | null>(null);
   const [revision, setRevision] = useState<string | null>(null);
@@ -888,10 +1119,51 @@ export function useDeviceConfiguration({
     ],
   );
 
+  const resumeHotApplication = useCallback(
+    async (
+      pending: PendingConfigApplication,
+      controller: AbortController,
+    ) => {
+      onApplicationLockChange(true);
+      setTargetRevision(pending.target_revision);
+      setApplicationState("verifying");
+      setRequestError(null);
+      try {
+        const result = await verifyRecoveredApplication(
+          pending,
+          pending.api_base_url,
+          controller,
+        );
+        if (!controller.signal.aborted) {
+          finishRecoveredApplication(pending, result);
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        clearPendingConfigApplication();
+        onApplicationLockChange(false);
+        setApplicationState("failed");
+        setRequestError(formatError(error));
+        setOutcome({ type: "error", message: formatError(error) });
+        setStatus(capabilities && draft ? "ready" : "error");
+      }
+    },
+    [
+      capabilities,
+      draft,
+      finishRecoveredApplication,
+      onApplicationLockChange,
+      verifyRecoveredApplication,
+    ],
+  );
+
   useEffect(() => {
     if (pendingAtMount) {
       const controller = beginOperation();
-      void resumeApplication(pendingAtMount, controller);
+      if (pendingAtMount.reconnect_required === false) {
+        void resumeHotApplication(pendingAtMount, controller);
+      } else {
+        void resumeApplication(pendingAtMount, controller);
+      }
     } else {
       void load();
     }
@@ -975,7 +1247,7 @@ export function useDeviceConfiguration({
   );
 
   const persistValidatedApplication = useCallback(
-    async ({ payload, controller }: PendingValidatedApplication) => {
+    async ({ payload, controller, requiresReconnect }: PendingValidatedApplication) => {
       pendingValidatedApplication.current = null;
       setApplicationConfirmation(null);
       setApplicationState("saving");
@@ -1000,16 +1272,36 @@ export function useDeviceConfiguration({
           task_id: taskReference.task_id,
           target_revision: saved.revision,
           started_at: startedAt,
+          reconnect_required: requiresReconnect,
         };
         writePendingConfigApplication(pending);
-        setApplicationState("restart_pending");
-        await delay(700, controller.signal);
-        await resumeApplication(pending, controller);
+        if (requiresReconnect) {
+          setApplicationState("restart_pending");
+          await delay(700, controller.signal);
+          await resumeApplication(pending, controller);
+        } else {
+          setApplicationState("verifying");
+          const result = await verifyRecoveredApplication(
+            pending,
+            apiBaseUrl,
+            controller,
+          );
+          if (!controller.signal.aborted) {
+            finishRecoveredApplication(pending, result);
+          }
+        }
       } catch (error) {
         await finishApplicationError(error, controller);
       }
     },
-    [apiBaseUrl, deviceId, finishApplicationError, resumeApplication],
+    [
+      apiBaseUrl,
+      deviceId,
+      finishApplicationError,
+      finishRecoveredApplication,
+      resumeApplication,
+      verifyRecoveredApplication,
+    ],
   );
 
   const saveAndApply = useCallback(async (scope: ConfigSaveScope = "all") => {
@@ -1030,8 +1322,8 @@ export function useDeviceConfiguration({
       scopedValues.tracking.single_object = cloneValues(draft).tracking.single_object;
     }
     const scopedHasChanges =
-      JSON.stringify(serializeConfigValues(scopedValues)) !==
-      JSON.stringify(serializeConfigValues(original));
+      JSON.stringify(serializeConfigValues(scopedValues, capabilities)) !==
+      JSON.stringify(serializeConfigValues(original, capabilities));
     if (!scopedHasChanges) return;
     const localErrors = validateDraftLocally(capabilities, scopedValues);
     if (localErrors.length > 0) {
@@ -1040,7 +1332,10 @@ export function useDeviceConfiguration({
     }
 
     const controller = beginOperation();
-    const payload = { revision, values: serializeConfigValues(scopedValues) };
+    const payload = {
+      revision,
+      values: serializeConfigValues(scopedValues, capabilities),
+    };
     setApplicationState("validating");
     onApplicationLockChange(true);
     setRequestError(null);
@@ -1065,13 +1360,21 @@ export function useDeviceConfiguration({
       const uvcChanged =
         capabilities.outputs?.uvc.supported === true &&
         original.outputs?.uvc.enabled !== draft.outputs?.uvc.enabled;
+      const requiresReconnect =
+        managementReconnect ||
+        uvcChanged ||
+        validationResult.requires.includes("ipcamera_restart");
       const needsConfirmation =
         managementReconnect ||
         uvcChanged ||
         validationResult.warnings.length > 0;
 
       if (needsConfirmation) {
-        pendingValidatedApplication.current = { payload, controller };
+        pendingValidatedApplication.current = {
+          payload,
+          controller,
+          requiresReconnect,
+        };
         setApplicationConfirmation({
           managementReconnect: managementReconnect || uvcChanged,
           warnings: validationResult.warnings,
@@ -1080,7 +1383,7 @@ export function useDeviceConfiguration({
         return;
       }
 
-      await persistValidatedApplication({ payload, controller });
+      await persistValidatedApplication({ payload, controller, requiresReconnect });
     } catch (error) {
       await finishApplicationError(error, controller);
     }

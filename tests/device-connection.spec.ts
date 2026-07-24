@@ -151,6 +151,27 @@ const configCapabilities = {
     human_pose: true,
     object_tracking: true,
   },
+  overlay: {
+    supported: true,
+    maxTexts: 3,
+    textMaxBytes: 63,
+    utf8Text: false,
+    thickness: { min: 1, max: 4 },
+    colorModes: ["fixed", "model"],
+    labelModes: ["none", "class", "class_score"],
+    reticleTemplates: [
+      "rectangle",
+      "corners",
+      "crosshair",
+      "crosshair_dot",
+      "bracket_cross",
+      "circle",
+    ],
+    streams: {
+      main: { text: true, ai: true },
+      sub: { text: true, ai: false },
+    },
+  },
   ai: {
     max_active_tpu_features: 1,
     features: [
@@ -192,7 +213,42 @@ const currentConfig = {
         bitrate_kbps: 1000,
       },
     },
-    overlay: { enabled: true },
+    overlay: {
+      enabled: true,
+      texts: [
+        {
+          id: "primary",
+          enabled: false,
+          content: "",
+          streams: ["main"],
+          position: "top-left",
+          x: 20,
+          y: 40,
+          color: "#FFFFFF",
+        },
+      ],
+      detection: {
+        enabled: true,
+        colorMode: "fixed",
+        color: "#00D9FF",
+        thickness: 2,
+        labelMode: "none",
+      },
+      tracking: {
+        enabled: true,
+        color: "#FFB000",
+        lostColor: "#FF3030",
+        thickness: 3,
+      },
+      reticle: {
+        enabled: true,
+        template: "corners",
+        idleColor: "#FFFFFF",
+        readyColor: "#FFC247",
+        thickness: 2,
+        showWhileTracking: false,
+      },
+    },
     detection: {
       object: {
         enabled: true,
@@ -1318,7 +1374,7 @@ test("selects, confirms, connects, and disconnects locally", async ({ page }) =>
   await expect(page.getByText("Manager", { exact: true })).toBeVisible();
   await expect(page.getByText("设备配置", { exact: true }).last()).toBeVisible();
   await expect(page.getByRole("region", { name: "主码流" })).toBeVisible();
-  await expect(page.getByRole("switch", { name: "启用 OSD" })).toBeChecked();
+  await expect(page.getByRole("switch", { name: "OSD 总开关" })).toBeChecked();
   await expect(page.getByText("192.168.42.1", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "配置分类" }),
@@ -1337,10 +1393,13 @@ test("selects, confirms, connects, and disconnects locally", async ({ page }) =>
     name: "01 视频码流",
   });
   const detectionSectionButton = page.getByRole("button", {
-    name: "03 智能检测",
+    name: "04 智能检测",
   });
   const outputsSectionButton = page.getByRole("button", {
     name: "02 输出服务",
+  });
+  const overlaySectionButton = page.getByRole("button", {
+    name: "03 OSD 设置",
   });
   const dashboard = page.getByRole("complementary", {
     name: "当前设备仪表盘",
@@ -1348,6 +1407,7 @@ test("selects, confirms, connects, and disconnects locally", async ({ page }) =>
   const dashboardTop = (await dashboard.boundingBox())?.y;
   await expect(videoSectionButton).toHaveAttribute("aria-current", "true");
   await expect(outputsSectionButton).toBeVisible();
+  await expect(overlaySectionButton).toBeVisible();
   await detectionSectionButton.click();
   await expect(detectionSectionButton).toHaveAttribute("aria-current", "true");
   await expect
@@ -1361,6 +1421,112 @@ test("selects, confirms, connects, and disconnects locally", async ({ page }) =>
   await page.getByTitle("断开连接").click();
   await expect(page.getByText("发现 1 台 OVIS 设备")).toBeVisible();
   await expect(page.getByText("搜索完成")).toBeVisible();
+});
+
+test("previews and hot-applies capability-driven OSD settings without reconnecting", async ({
+  page,
+}) => {
+  let activeDocument = structuredClone(currentConfig);
+  let validationPayload: typeof currentConfig | null = null;
+  let taskRequests = 0;
+  let deviceInfoRequests = 0;
+  await mockConfigurationRead(page);
+  await page.unroute("**/api/v1/config");
+  await page.route("**/api/v1/config", async (route) => {
+    if (route.request().method() === "PUT") {
+      const payload = await route.request().postDataJSON() as typeof currentConfig;
+      activeDocument = {
+        revision: "overlay-revision",
+        values: structuredClone(payload.values),
+      };
+      return fulfillJson(route, {
+        saved: true,
+        revision: activeDocument.revision,
+        restart_required: false,
+      });
+    }
+    return fulfillJson(route, activeDocument);
+  });
+  await page.route("**/api/v1/config/validate", async (route) => {
+    validationPayload = await route.request().postDataJSON() as typeof currentConfig;
+    return fulfillJson(route, {
+      valid: true,
+      errors: [],
+      warnings: [],
+      requires: ["overlay_reload"],
+    });
+  });
+  await page.route("**/api/v1/config/apply", (route) =>
+    fulfillJson(route, { task_id: 73 }),
+  );
+  await page.route("**/api/v1/tasks/73", (route) => {
+    taskRequests += 1;
+    return fulfillJson(route, {
+      id: 73,
+      state: taskRequests === 1 ? "running" : "succeeded",
+      progress: taskRequests === 1 ? 45 : 100,
+      message: taskRequests === 1 ? "正在刷新 OSD" : "OSD 已更新",
+    });
+  });
+  await page.route("**/api/v1/device/info", (route) => {
+    deviceInfoRequests += 1;
+    if (requestHost(route) === "192.168.42.1") return fulfillJson(route, deviceInfo);
+    return route.abort("connectionrefused");
+  });
+
+  await page.goto("./");
+  await page.getByRole("button", { name: "搜索设备" }).click();
+  await page.getByRole("radio").click();
+  await page.getByRole("button", { name: "连接", exact: true }).click();
+  await page.getByRole("button", { name: "03 OSD 设置" }).click();
+
+  const preview = page.locator(".overlay-preview");
+  const previewBox = await preview.boundingBox();
+  expect(previewBox).not.toBeNull();
+  expect((previewBox?.width ?? 0) / (previewBox?.height ?? 1)).toBeCloseTo(16 / 9, 1);
+
+  await page.getByRole("switch", { name: "显示自定义文字" }).click();
+  await page.getByLabel("文字内容").fill("OVIS LAB");
+  await page.getByLabel("显示位置").selectOption("bottom-right");
+  await page.getByLabel("文字颜色").fill("#AABBCC");
+  await page.getByRole("button", { name: "十字加中心点" }).click();
+  const reticleGroup = page.locator(".overlay-settings__group").filter({
+    hasText: "中心准星",
+  });
+  await reticleGroup.getByRole("slider", { name: "线条粗细" }).fill("4");
+
+  await expect(preview.locator(".overlay-preview__text")).toHaveText("OVIS LAB");
+  await expect(preview.locator(".overlay-preview__text")).toHaveClass(/bottom-right/);
+  await expect(preview.locator(".overlay-reticle--crosshair_dot")).toBeVisible();
+
+  const requestsBeforeApply = deviceInfoRequests;
+  await page.getByRole("button", { name: "保存并应用" }).click();
+  await expect(page.getByText("配置已应用")).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText("设备在线").first()).toBeVisible();
+  expect(deviceInfoRequests).toBe(requestsBeforeApply);
+  expect(taskRequests).toBe(2);
+  expect(validationPayload).toMatchObject({
+    values: {
+      overlay: {
+        enabled: true,
+        texts: [
+          {
+            id: "primary",
+            enabled: true,
+            content: "OVIS LAB",
+            streams: ["main"],
+            position: "bottom-right",
+            color: "#AABBCC",
+          },
+        ],
+        reticle: {
+          enabled: true,
+          template: "crosshair_dot",
+          thickness: 4,
+        },
+      },
+    },
+  });
 });
 
 test("imports a model with same-origin full-file upload and CSRF writes", async ({
@@ -1603,7 +1769,7 @@ test("blocks model activation while the configuration draft is unsaved", async (
   await page.getByRole("radio").click();
   await page.getByRole("button", { name: "连接", exact: true }).click();
 
-  await page.getByRole("switch", { name: "启用 OSD" }).click();
+  await page.getByRole("switch", { name: "OSD 总开关" }).click();
   await page.getByRole("button", { name: /模型管理/ }).click();
   await page.getByTitle("启用").click();
 
@@ -2242,7 +2408,7 @@ test("edits, validates, saves, applies, and polls configuration", async ({
   await expect(subFps.locator('option[value="60"]')).toHaveCount(0);
 
   await mainFps.selectOption("60");
-  await page.getByRole("switch", { name: "启用 OSD" }).click();
+  await page.getByRole("switch", { name: "OSD 总开关" }).click();
   const rtspMode = page.getByRole("radio", { name: "RTSP 输出" });
   const uvcMode = page.getByRole("radio", { name: "UVC USB 摄像头" });
   await expect(uvcMode).toBeChecked();
@@ -2646,7 +2812,7 @@ test("restores defaults and reloads the resulting configuration", async ({
   await page.getByRole("button", { name: "确认恢复" }).click();
 
   await expect(page.getByText("已恢复默认配置")).toBeVisible();
-  await expect(page.getByRole("switch", { name: "启用 OSD" })).not.toBeChecked();
+  await expect(page.getByRole("switch", { name: "OSD 总开关" })).not.toBeChecked();
   await expect(page.getByText("REVISION defaults-1")).toBeVisible();
 });
 
@@ -2785,7 +2951,7 @@ test("does not retry a failed non-idempotent device write", async ({ page }) => 
   await discoverSingleDevice(page);
   await page.getByRole("radio").click();
   await page.getByRole("button", { name: "连接", exact: true }).click();
-  await page.getByRole("switch", { name: "启用 OSD" }).click();
+  await page.getByRole("switch", { name: "OSD 总开关" }).click();
   await page.getByRole("button", { name: "应用配置" }).click();
 
   await expect.poll(() => putRequests).toBe(1);

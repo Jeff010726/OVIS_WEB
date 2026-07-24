@@ -129,6 +129,75 @@ export interface OutputCapabilities {
   };
 }
 
+export type OverlayTextPosition =
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right"
+  | "custom";
+
+export type OverlayColorMode = "fixed" | "model";
+export type OverlayLabelMode = "none" | "class" | "class_score";
+export type ReticleTemplate =
+  | "rectangle"
+  | "corners"
+  | "crosshair"
+  | "crosshair_dot"
+  | "bracket_cross"
+  | "circle";
+
+export interface OverlayTextConfig {
+  id: string;
+  enabled: boolean;
+  content: string;
+  streams: string[];
+  position: OverlayTextPosition;
+  x: number;
+  y: number;
+  color: string;
+}
+
+export interface OverlayConfigValues {
+  enabled: boolean;
+  texts: OverlayTextConfig[];
+  detection: {
+    enabled: boolean;
+    colorMode: OverlayColorMode;
+    color: string;
+    thickness: number;
+    labelMode: OverlayLabelMode;
+  };
+  tracking: {
+    enabled: boolean;
+    color: string;
+    lostColor: string;
+    thickness: number;
+  };
+  reticle: {
+    enabled: boolean;
+    template: ReticleTemplate;
+    idleColor: string;
+    readyColor: string;
+    thickness: number;
+    showWhileTracking: boolean;
+  };
+}
+
+export interface OverlayCapabilities {
+  supported: boolean;
+  maxTexts: number;
+  textMaxBytes: number;
+  utf8Text: boolean;
+  thickness: {
+    min: number;
+    max: number;
+  };
+  colorModes: OverlayColorMode[];
+  labelModes: OverlayLabelMode[];
+  reticleTemplates: ReticleTemplate[];
+  streams: Record<string, { text: boolean; ai: boolean }>;
+}
+
 export interface ConfigCapabilities {
   schema_version: number;
   video: {
@@ -148,6 +217,7 @@ export interface ConfigCapabilities {
   ai?: AiCapabilities;
   ai_isp?: AiIspCapabilities;
   outputs?: OutputCapabilities;
+  overlay?: OverlayCapabilities;
 }
 
 export interface StreamConfigValues {
@@ -174,9 +244,7 @@ export interface DeviceConfigValues {
     main: StreamConfigValues;
     sub: StreamConfigValues & { enabled: boolean };
   };
-  overlay: {
-    enabled: boolean;
-  };
+  overlay: OverlayConfigValues;
   detection: {
     object: {
       enabled: boolean;
@@ -225,13 +293,18 @@ export interface DeviceConfigDocument {
   values: DeviceConfigValues;
 }
 
+export type SerializedDeviceConfigValues = Omit<DeviceConfigValues, "overlay"> & {
+  overlay: OverlayConfigValues | { enabled: boolean };
+};
+
 export interface ConfigPayload {
   revision: string;
-  values: DeviceConfigValues;
+  values: SerializedDeviceConfigValues;
 }
 
 export interface ConfigIssue {
   field: string;
+  path?: string;
   code: string;
   message: string;
 }

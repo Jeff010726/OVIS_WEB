@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
+  Crosshair,
   ImageOff,
   LoaderCircle,
   Network,
@@ -43,6 +44,7 @@ import type {
   VideoProfileCapability,
 } from "./config.types";
 import { useDeviceConfiguration } from "./useDeviceConfiguration";
+import { OverlaySettings } from "./OverlaySettings";
 import { ModelManager } from "../models/ModelManager";
 import type { ModelSummary } from "../models/model.types";
 import {
@@ -720,7 +722,7 @@ const disableAiFeature = (
   }
 };
 
-type ConfigSectionId = "video" | "outputs" | "detection" | "models";
+type ConfigSectionId = "video" | "outputs" | "overlay" | "detection" | "models";
 
 interface ConfigSection {
   id: ConfigSectionId;
@@ -728,6 +730,7 @@ interface ConfigSection {
   labelKey:
     | "config.sections.video"
     | "config.sections.outputs"
+    | "config.sections.overlay"
     | "config.sections.detection"
     | "config.sections.models";
 }
@@ -765,18 +768,27 @@ export function DeviceConfiguration({
   const sectionRefs = useRef<Record<ConfigSectionId, HTMLElement | null>>({
     video: null,
     outputs: null,
+    overlay: null,
     detection: null,
     models: null,
   });
   const productImage = getDeviceImage(device.model);
   const issues = configuration.validation?.errors ?? [];
   const isBusy = configuration.applicationBusy || configuration.status === "resetting";
+  const deviceRecovering =
+    configuration.applicationState === "restart_pending" ||
+    configuration.applicationState === "reconnecting" ||
+    (applicationLocked && !configuration.applicationBusy);
   const outputCapabilities = configuration.capabilities?.outputs;
   const outputValues = configuration.draft?.outputs;
   const hasOutputServices =
     outputValues !== undefined &&
     (outputCapabilities?.rtsp.supported === true ||
       outputCapabilities?.uvc.supported === true);
+  const hasOverlay =
+    configuration.capabilities?.overlay !== undefined
+      ? configuration.capabilities.overlay.supported === true
+      : configuration.capabilities?.features.osd === true;
   const rtspEnabled =
     outputCapabilities?.rtsp.supported !== true ||
     outputValues?.rtsp.enabled === true;
@@ -807,6 +819,9 @@ export function DeviceConfiguration({
       ...(hasOutputServices
         ? [{ id: "outputs" as const, labelKey: "config.sections.outputs" as const }]
         : []),
+      ...(hasOverlay
+        ? [{ id: "overlay" as const, labelKey: "config.sections.overlay" as const }]
+        : []),
       { id: "detection", labelKey: "config.sections.detection" },
       { id: "models", labelKey: "config.sections.models" },
     ];
@@ -814,7 +829,7 @@ export function DeviceConfiguration({
       ...section,
       index: String(index + 1).padStart(2, "0"),
     }));
-  }, [hasOutputServices]);
+  }, [hasOutputServices, hasOverlay]);
   const sectionIndex = (sectionId: ConfigSectionId) =>
     configSections.find((section) => section.id === sectionId)?.index;
   const activeStatus = (
@@ -1009,6 +1024,11 @@ export function DeviceConfiguration({
     ],
     [customModels, t],
   );
+  const activeMainProfile = configuration.capabilities?.video.main.profiles.find(
+    (profile) => profile.id === configuration.draft?.video.main.profile,
+  );
+  const overlayVideoWidth = activeMainProfile?.width ?? 1920;
+  const overlayVideoHeight = activeMainProfile?.height ?? 1080;
 
   useEffect(() => {
     if (!runtimeTrackingValues?.enabled || applicationLocked) {
@@ -1554,6 +1574,38 @@ export function DeviceConfiguration({
                     </section>
                   )}
 
+                  {hasOverlay && (
+                    <section
+                      className="config-section config-section--overlay"
+                      aria-labelledby="overlay-config-heading"
+                      ref={(element) => {
+                        sectionRefs.current.overlay = element;
+                      }}
+                    >
+                      <div className="config-section__heading">
+                        <Crosshair size={18} />
+                        <div>
+                          <span>{sectionIndex("overlay")}</span>
+                          <h3 id="overlay-config-heading">
+                            {t("config.sections.overlay")}
+                          </h3>
+                        </div>
+                      </div>
+                      <OverlaySettings
+                        capability={configuration.capabilities.overlay}
+                        values={configuration.draft.overlay}
+                        disabled={isBusy || applicationLocked}
+                        videoWidth={overlayVideoWidth}
+                        videoHeight={overlayVideoHeight}
+                        onChange={(mutator) =>
+                          configuration.updateDraft((draft) => {
+                            mutator(draft.overlay);
+                          })
+                        }
+                      />
+                    </section>
+                  )}
+
                   <section
                     className="config-section"
                     aria-labelledby="feature-config-heading"
@@ -1748,33 +1800,6 @@ export function DeviceConfiguration({
                           onSave={() => void configuration.saveAndApply("tracking")}
                         />
                       )}
-                      <div className="feature-row feature-row--simple">
-                        <div className="feature-row__identity">
-                          <span aria-hidden="true">
-                            <Video size={17} />
-                          </span>
-                          <div>
-                            <strong>{t("config.overlay.title")}</strong>
-                            <small>
-                              {configuration.capabilities.features.osd
-                                ? configuration.draft.overlay.enabled
-                                  ? t("common.enabled")
-                                  : t("common.disabled")
-                                : t("common.unsupported")}
-                            </small>
-                          </div>
-                        </div>
-                        <Toggle
-                          checked={configuration.draft.overlay.enabled}
-                          disabled={!configuration.capabilities.features.osd}
-                          label={t("config.overlay.enable")}
-                          onChange={(checked) =>
-                            configuration.updateDraft((draft) => {
-                              draft.overlay.enabled = checked;
-                            })
-                          }
-                        />
-                      </div>
                       {nonObjectTpuCapabilities.map((capability) => {
                         const draft = configuration.draft;
                         if (!draft) return null;
@@ -1969,12 +1994,12 @@ export function DeviceConfiguration({
         </nav>
 
         <aside
-          className={`device-dashboard ${applicationLocked || isBusy ? "device-dashboard--recovering" : ""}`}
+          className={`device-dashboard ${deviceRecovering ? "device-dashboard--recovering" : ""}`}
           aria-label={t("config.currentDashboard")}
         >
           <div className="device-dashboard__status">
             <span />
-            {applicationLocked || isBusy
+            {deviceRecovering
               ? t("config.deviceRestarting")
               : t("config.deviceOnline")}
           </div>
@@ -1991,7 +2016,7 @@ export function DeviceConfiguration({
           <div className="device-dashboard__identity">
             <div className="eyebrow">
               <Wifi size={12} />
-              {applicationLocked || isBusy
+              {deviceRecovering
                 ? t("config.targetDevice")
                 : t("config.connectedDevice")}
             </div>

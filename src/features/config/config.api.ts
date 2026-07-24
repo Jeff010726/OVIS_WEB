@@ -110,7 +110,17 @@ export const validateConfig = (
     method: "POST",
     body: payload,
     signal,
-  });
+  }).then((response) => ({
+    ...response,
+    errors: response.errors.map((issue) => ({
+      ...issue,
+      field: issue.field ?? issue.path ?? "",
+    })),
+    warnings: response.warnings.map((issue) => ({
+      ...issue,
+      field: issue.field ?? issue.path ?? "",
+    })),
+  }));
 
 export const saveConfig = (
   apiBaseUrl: string,
