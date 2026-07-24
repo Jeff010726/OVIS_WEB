@@ -819,11 +819,11 @@ export function DeviceConfiguration({
       ...(hasOutputServices
         ? [{ id: "outputs" as const, labelKey: "config.sections.outputs" as const }]
         : []),
+      { id: "detection", labelKey: "config.sections.detection" },
+      { id: "models", labelKey: "config.sections.models" },
       ...(hasOverlay
         ? [{ id: "overlay" as const, labelKey: "config.sections.overlay" as const }]
         : []),
-      { id: "detection", labelKey: "config.sections.detection" },
-      { id: "models", labelKey: "config.sections.models" },
     ];
     return sectionIds.map((section, index) => ({
       ...section,
@@ -1574,38 +1574,6 @@ export function DeviceConfiguration({
                     </section>
                   )}
 
-                  {hasOverlay && (
-                    <section
-                      className="config-section config-section--overlay"
-                      aria-labelledby="overlay-config-heading"
-                      ref={(element) => {
-                        sectionRefs.current.overlay = element;
-                      }}
-                    >
-                      <div className="config-section__heading">
-                        <Crosshair size={18} />
-                        <div>
-                          <span>{sectionIndex("overlay")}</span>
-                          <h3 id="overlay-config-heading">
-                            {t("config.sections.overlay")}
-                          </h3>
-                        </div>
-                      </div>
-                      <OverlaySettings
-                        capability={configuration.capabilities.overlay}
-                        values={configuration.draft.overlay}
-                        disabled={isBusy || applicationLocked}
-                        videoWidth={overlayVideoWidth}
-                        videoHeight={overlayVideoHeight}
-                        onChange={(mutator) =>
-                          configuration.updateDraft((draft) => {
-                            mutator(draft.overlay);
-                          })
-                        }
-                      />
-                    </section>
-                  )}
-
                   <section
                     className="config-section"
                     aria-labelledby="feature-config-heading"
@@ -1949,6 +1917,38 @@ export function DeviceConfiguration({
                       onDeviceRecovered={onDeviceRecovered}
                     />
                   </section>
+
+                  {hasOverlay && (
+                    <section
+                      className="config-section config-section--overlay"
+                      aria-labelledby="overlay-config-heading"
+                      ref={(element) => {
+                        sectionRefs.current.overlay = element;
+                      }}
+                    >
+                      <div className="config-section__heading">
+                        <Crosshair size={18} />
+                        <div>
+                          <span>{sectionIndex("overlay")}</span>
+                          <h3 id="overlay-config-heading">
+                            {t("config.sections.overlay")}
+                          </h3>
+                        </div>
+                      </div>
+                      <OverlaySettings
+                        capability={configuration.capabilities.overlay}
+                        values={configuration.draft.overlay}
+                        disabled={isBusy || applicationLocked}
+                        videoWidth={overlayVideoWidth}
+                        videoHeight={overlayVideoHeight}
+                        onChange={(mutator) =>
+                          configuration.updateDraft((draft) => {
+                            mutator(draft.overlay);
+                          })
+                        }
+                      />
+                    </section>
+                  )}
                 </fieldset>
 
                 <footer className="configuration-footer">

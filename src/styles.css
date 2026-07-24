@@ -4058,6 +4058,200 @@ a:focus-visible {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* Keep the configuration workspace dense, but readable at normal desktop distance. */
+.workspace-panel--configuration button,
+.workspace-panel--configuration input,
+.workspace-panel--configuration select {
+  font-size: 12px;
+}
+
+.configuration-toolbar .eyebrow,
+.draft-state {
+  font-size: 11px;
+}
+
+.config-section__heading span {
+  font-size: 9px;
+}
+
+.config-section__heading h3 {
+  font-size: 15px;
+}
+
+.stream-panel__heading h4 {
+  font-size: 14px;
+}
+
+.stream-panel__heading span,
+.sub-stream-switch > span {
+  font-size: 10px;
+}
+
+.stream-panel__heading small,
+.config-field em,
+.number-input small {
+  font-size: 10px;
+}
+
+.config-field > span:first-child,
+.config-field select,
+.config-field input[type="number"] {
+  font-size: 12px;
+}
+
+.config-field select,
+.config-field input[type="number"] {
+  height: 38px;
+}
+
+.ai-isp-group__heading span,
+.output-mode-panel > span,
+.detection-runtime-summary span,
+.processing-size-editor > span:first-child,
+.model-deployment-size > span:first-child {
+  font-size: 12px;
+}
+
+.ai-isp-group__heading small,
+.builtin-detection-panel__notice,
+.tracking-panel__notice,
+.tracking-panel__link-state,
+.tracking-panel__error {
+  font-size: 11px;
+}
+
+.detection-runtime-summary strong {
+  font-size: 14px;
+}
+
+.feature-row__identity strong {
+  font-size: 13px;
+}
+
+.feature-row__identity small,
+.feature-row__range > span,
+.feature-row__range output,
+.tracking-control > span,
+.processing-size-editor label span {
+  font-size: 11px;
+}
+
+.tracking-control select,
+.processing-size-editor select,
+.processing-size-editor input,
+.model-deployment-size select,
+.model-deployment-size input {
+  font-size: 12px;
+}
+
+.processing-size-editor--readonly output {
+  font-size: 11px;
+}
+
+.overlay-preview-state button,
+.overlay-master-toggle small,
+.overlay-settings__legacy,
+.overlay-settings__group p,
+.overlay-switch-row > span,
+.overlay-color-field,
+.overlay-select-field,
+.overlay-text-field,
+.overlay-range-field,
+.overlay-coordinate-fields label,
+.reticle-template-field > span {
+  font-size: 11px;
+}
+
+.overlay-master-toggle strong,
+.overlay-settings__group h4 {
+  font-size: 14px;
+}
+
+.overlay-text-field input,
+.overlay-select-field select,
+.overlay-coordinate-fields input {
+  font-size: 12px;
+}
+
+.overlay-text-field small,
+.overlay-color-field output,
+.overlay-range-field output,
+.reticle-template-grid small {
+  font-size: 10px;
+}
+
+.model-manager__toolbar strong,
+.import-task-view strong,
+.model-deployment-view strong,
+.model-choice-grid strong,
+.model-table__identity strong {
+  font-size: 13px;
+}
+
+.model-manager__toolbar small,
+.import-task-view small,
+.model-deployment-view small,
+.model-select-field,
+.model-number-field,
+.model-vector-field,
+.model-retry-file,
+.model-import-form__common label,
+.model-import-form__common small,
+.model-field-heading label,
+.model-select-field > span,
+.model-number-field > span,
+.model-vector-field > span:first-child,
+.pending-imports h5,
+.model-metadata h5,
+.model-table__row,
+.model-status-stack i,
+.import-task-view output,
+.model-detail-view output,
+.model-deployment-view output,
+.import-task-view dd,
+.model-detail-view dd,
+.model-deployment-view dd {
+  font-size: 11px;
+}
+
+.model-table__head,
+.model-table__identity small,
+.model-status-stack small,
+.import-task-view dt,
+.model-detail-view dt,
+.model-deployment-view dt,
+.model-form-errors,
+.model-dialog span {
+  font-size: 10px;
+}
+
+.configuration-footer {
+  font-size: 10px;
+}
+
+.config-section-nav__header > span,
+.config-section-nav__list button > span {
+  font-size: 9px;
+}
+
+.config-section-nav__list button strong {
+  font-size: 11px;
+}
+
+.device-dashboard__status,
+.device-dashboard__identity p,
+.device-dashboard__meta dt,
+.device-dashboard__meta dd {
+  font-size: 10px;
+}
+
+.device-dashboard__reset-address,
+.device-network-reset-confirmation > span,
+.device-network-reset-confirmation > em,
+.device-network-reset-confirmation .button {
+  font-size: 11px;
+}
+
 .workspace-panel--configuration {
   width: 100%;
   height: 100%;
